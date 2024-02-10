@@ -111,7 +111,7 @@ def read_a0(
     p = data[:, 0] & 0xF
     return t, p
 
-def read_a1(
+def _read_a1(
         filename: str,
         legacy: bool = False,
         resolution: TSRES = TSRES.NS1,
@@ -139,6 +139,54 @@ def read_a2(
     t = np.uint64(data >> 10)
     t = _format_timestamps(t, resolution, fractional)
     p = data & 0xF
+    return t, p
+
+def read_a1(
+        filename: str,
+        legacy: bool = False,
+        resolution: TSRES = TSRES.NS1,
+        fractional: bool = True,
+        start: float = None,
+        end: float = None,
+        pattern: int = None,
+        mask: bool = False,
+        invert: bool = False,
+        buffer_size: int = 100_000,
+    ):
+    """Wrapper to sread_a1 for efficiently reading subsets of whole file.
+
+    For descriptions of arguments, read the documentation:
+
+        - 'read_a0': Importing timestamps.
+        - 'sread_a1': Importing timestamps via file streaming.
+        - 'get_timing_bounds': Filtering by timing.
+        - 'get_pattern_mask': Filtering by detector pattern.
+
+    If 'buffer_size' of None is supplied, the old legacy '_read_a1' code
+    will be used, and all timing/pattern filtering will be disabled.
+    """
+    if buffer_size is None:
+        return _read_a1(filename, legacy, resolution, fractional)
+
+    streamer, _ = sread_a1(filename, legacy, resolution, fractional, buffer_size)
+    ts = []; ps = []
+    commenced_reading = False
+    for t, p in streamer:
+        i, j = get_timing_bounds(t, start, end, resolution)
+        t = t[i:j]; p = p[i:j]
+        if pattern is not None:
+            pmask = get_pattern_mask(p, pattern, mask, invert)
+            t = t[pmask]; p = p[pmask]
+
+        # Terminate if no more timings readable
+        if commenced_reading and len(t) == 0:
+            break
+        else:
+            commenced_reading = True
+        ts.append(t)
+        ps.append(p)
+    t = np.concatenate(ts)
+    p = np.concatenate(ps)
     return t, p
 
 def sread_a1(
