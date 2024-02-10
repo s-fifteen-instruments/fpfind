@@ -598,6 +598,68 @@ def get_pattern_mask(
 
     return pmask, masked
 
+def get_timing_bounds(
+        t: list,
+        start: Optional[float] = None,
+        end: Optional[float] = None,
+        resolution: TSRES = TSRES.NS1,
+    ) -> list:
+    """Returns indices of start and end for region where timings match.
+
+    The timing array is already assumed to be sorted, as part of the timestamp
+    filespec. If 'start' or 'end' is None, the range is assumed unbounded in respective direction.
+    Start and end time are in seconds (not ns since typical usecase as rough filter anyway).
+
+    This function is preferred over 'get_timing_mask' inline filtering,
+    due to the overheads of masking.
+
+    Args:
+        t: Timestamp array, in units of 'resolution'.
+        start: Start timestamp, in seconds.
+        end: End timestamp, in seconds.
+        resolution: Resolution of timestamps in timestamp array.
+
+    Note:
+        # Masking overhead
+        >>> timeit
+        >>> setup = "import numpy as np; size=1_000_000; a = np.random.random(size);"
+        >>> setup_w_mask = setup + "mask = np.zeros(size).astype(bool); mask[1000:999000] = True;"
+        >>> timeit.timeit('a[1000:999000]', setup, number=1000)
+        0.00011489982716739178
+        >>> timeit.timeit('a[mask]', setup_w_mask, number=1000)
+        1.7692412599921226
+    """
+    # Nothing in array
+    NULL_RESULT = (0, 0)
+    if len(t) == 0:
+        return NULL_RESULT
+
+    if start is not None:
+        start *= (1e9 * resolution.value)  # convert to same base for comp.
+    if end is not None:
+        end *= (1e9 * resolution.value)
+    _start = t[0]
+    _end = t[-1]
+
+    # Find start index
+    if (start is None) or (start <= _start):
+        i = 0
+    elif start > _end:
+        return NULL_RESULT
+    else:
+        i = bisect.bisect_left(t, start)  # binary search
+
+    # Find end index
+    if (end is None) or (end >= _end):
+        j = len(t)
+    elif end < _start:
+        return NULL_RESULT
+    else:
+        j = bisect.bisect_right(t, end)
+
+    return i, j
+
+
 def get_timing_mask(
         t: list,
         start: Optional[float] = None,
@@ -649,31 +711,8 @@ def get_timing_mask(
         >>> list(t[mask7]) == to_ns([2,4])
         True
     """
-    # Short-circuit if no results present
     mask = np.zeros(len(t), dtype=bool)
-    if len(t) == 0:
-        return mask
-
-    # Parse start argument
-    if start is None:
-        start = t[0]
-        i = 0
-    else:
-        start *= (1e9 * resolution.value)  # convert s -> ns -> resolution
-        i = bisect.bisect_left(t, start)  # binary search
-    if start > t[-1]:
-        return mask
-
-    # Parse end argument
-    if end is None:
-        end = t[-1]
-        j = len(t)
-    else:
-        end *= (1e9 * resolution.value)  # convert s -> ns -> resolution
-        j = bisect.bisect_right(t, end)  # binary search
-    if end < t[0]:
-        return mask
-
+    i, j = get_timing_bounds(t, start, end, resolution)
     mask[i:j] = True
     return mask
 
