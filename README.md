@@ -10,7 +10,7 @@ Requirements:
 Install the library:
 
 ```bash
-pip3 install git+https://github.com/franciumxzf/fpfind.git
+pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git
 ```
 
 Binaries and scripts will be exposed to the path; commonly used scripts are listed below.
@@ -79,4 +79,3 @@ tests/test_py2c_example_hello.py .                      [100%]
 
 ====================== 1 passed in 0.34s ======================
 ```
-

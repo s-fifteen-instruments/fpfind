@@ -66,7 +66,7 @@
      - Optimize buffer parameters
 
    References:
-     [1]: Formulae, https://github.com/franciumxzf/fpfind/issues/6
+     [1]: Formulae, https://github.com/s-fifteen-instruments/fpfind/issues/6
  */
 
 #include <stdio.h>
@@ -151,7 +151,7 @@ Encoding options:\n\
   -d               Use units of 0.1ppb for '-f'        (range: 0-1220703).\n\
 \n\
 Shows this help with '-h' option. More descriptive documentation:\n\
-<https://github.com/franciumxzf/fpfind/blob/main/src/fpfind/freqcd.c>\n\
+<https://github.com/s-fifteen-instruments/fpfind/blob/main/src/fpfind/freqcd.c>\n\
 ");
 }
 
