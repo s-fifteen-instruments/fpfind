@@ -271,6 +271,9 @@ def slice_timestamps(
     else:
         ts = ts - ts[0]
     if duration is not None:
+        if len(ts) == 0:
+            warnings.warn("No data available.")
+            return []
         if duration >= ts[-1]:
             warnings.warn(
                 f"Desired duration ({duration*1e-9:.3f} s) is longer "
