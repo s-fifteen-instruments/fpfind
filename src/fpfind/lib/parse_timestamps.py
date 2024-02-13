@@ -49,6 +49,7 @@
 
 import argparse
 import bisect
+import io
 import pathlib
 import warnings
 import struct
@@ -231,19 +232,12 @@ def sread_a1(
         'read_a1' should be preferred instead.
     """
     def _sread_a1():
-        high_pos = 1; low_pos = 0
-        if legacy: high_pos, low_pos = low_pos, high_pos
         with open(filename, "rb") as f:
             while True:
                 buffer = f.read(buffer_size*8)  # 8 bytes per event
                 if len(buffer) == 0:
                     break
-
-                data = np.frombuffer(buffer, dtype="=I").reshape(-1, 2)
-                t = ((np.uint64(data[:, high_pos]) << 22) + (data[:, low_pos] >> 10))
-                t = _format_timestamps(t, resolution, fractional)
-                p = data[:, low_pos] & 0xF
-                yield t, p
+                yield _parse_a1(buffer, legacy, resolution, fractional)
 
     size = pathlib.Path(filename).stat().st_size
     num_batches = int(((size-1) // (buffer_size*8)) + 1)
@@ -325,6 +319,55 @@ def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
         t = np.array(t, dtype=np.uint64)
         t = t // (TSRES.PS4.value//resolution.value)
     return t
+
+def read_a1_start_end(
+        filename: str,
+        legacy: bool = False,
+        resolution: TSRES = TSRES.NS1,
+        fractional: bool = True,
+    ):
+    t, _ = _read_a1_kth_timestamp(
+        filename, [0, -1], legacy, resolution, fractional,
+    )
+    return t * 1e-9
+
+def _read_a1_kth_timestamp(
+        filename,
+        k,
+        legacy: bool = False,
+        resolution: TSRES = TSRES.NS1,
+        fractional: bool = True,
+    ):
+    filesize = pathlib.Path(filename).stat().st_size
+    num_events = filesize / 8  # 8 bytes per event
+
+    # Parse indices
+    ks = np.array(k).astype(int)
+    ks = np.array([(num_events+k if k < 0 else k) for k in ks])  # convert to positive ints
+    if np.any(ks >= num_events):
+        raise ValueError(f"Index out-of-bounds, only {num_events} events available.")
+
+    buffer = bytearray()
+    with open(filename, "rb") as f:
+        for k in ks:
+            f.seek(int(k)*8, io.SEEK_SET)  # should be O(1) in modern filesystems
+            buffer.extend(f.read(8))
+
+    return _parse_a1(buffer, legacy, resolution, fractional)
+
+def _parse_a1(
+        buffer,
+        legacy: bool = False,
+        resolution: TSRES = TSRES.NS1,
+        fractional: bool = True,
+    ):
+    high_pos = 1; low_pos = 0
+    if legacy: high_pos, low_pos = low_pos, high_pos
+    data = np.frombuffer(buffer, dtype="=I").reshape(-1, 2)
+    t = ((np.uint64(data[:, high_pos]) << 22) + (data[:, low_pos] >> 10))
+    t = _format_timestamps(t, resolution, fractional)
+    p = data[:, low_pos] & 0xF
+    return t, p
 
 
 
