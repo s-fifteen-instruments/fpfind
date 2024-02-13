@@ -50,6 +50,9 @@ _ENABLE_BREAKPOINT = False
 # Controls learning rate, i.e. how much to decrease resolution by
 RES_REFINE_FACTOR = np.sqrt(2)
 
+# Set lower limit to frequency compensation before disabling
+TARGET_DF = 1e-10
+
 PROFILE_LEVEL = 0
 def profile(f):
     """Performs a simple timing profile.
@@ -137,6 +140,7 @@ def time_freq(
     dt = 0
     f = 1
     curr_iteration = 1
+    do_frequency_compensation = True
 
     # Custom breakpoint for experimentation
     if _ENABLE_BREAKPOINT:
@@ -220,50 +224,53 @@ def time_freq(
                 significance=sig, resolution=resolution, dt1=dt1,
             )
 
-        # TODO(2024-01-31):
-        #     Add short-circuit to ignore late xcorr
-        #     if 'df' is near zero.
-        # TODO(2024-01-31):
-        #     If signal too low, spurious peaks may occur. Implement
-        #     a mechanism to retry to obtain an alternative value.
-        logger.debug(
-            "      Performing later xcorr (range: [%.2f, %.2f]s)",
-            separation_duration*1e-9, (separation_duration+_duration)*1e-9,
-        )
-        ats_late = slice_timestamps(ats, separation_duration, _duration)
-        bts_late = slice_timestamps(bts, separation_duration, _duration)
-        _afft = generate_fft(ats_late, num_bins, resolution)
-        _bfft = generate_fft(bts_late, num_bins, resolution)
-        _ys = get_xcorr(_afft, _bfft)
+        _dt1 = dt1; df1 = 0  # default values
+        if do_frequency_compensation:
+            # TODO(2024-01-31):
+            #     If signal too low, spurious peaks may occur. Implement
+            #     a mechanism to retry to obtain an alternative value.
+            logger.debug(
+                "      Performing later xcorr (range: [%.2f, %.2f]s)",
+                separation_duration*1e-9, (separation_duration+_duration)*1e-9,
+            )
+            ats_late = slice_timestamps(ats, separation_duration, _duration)
+            bts_late = slice_timestamps(bts, separation_duration, _duration)
+            _afft = generate_fft(ats_late, num_bins, resolution)
+            _bfft = generate_fft(bts_late, num_bins, resolution)
+            _ys = get_xcorr(_afft, _bfft)
 
-        # Calculate timing delay for late set of timestamps
-        xs = np.arange(num_bins) * resolution
-        _dt1 = get_timing_delay_fft(_ys, xs)[0]
-        df1 = (_dt1 - dt1) / separation_duration
+            # Calculate timing delay for late set of timestamps
+            xs = np.arange(num_bins) * resolution
+            _dt1 = get_timing_delay_fft(_ys, xs)[0]
+            df1 = (_dt1 - dt1) / separation_duration
 
-        # Some guard rails to make sure results make sense
-        # Something went wrong with peak searching, to return intermediate
-        # results which are likely near correct values.
-        # TODO(2024-01-31): Fix this.
-        buffer = 10
-        threshold_dt = buffer*max(abs(dt), 1)
-        threshold_df = buffer*max(abs(f-1), 1e-9)
-        if curr_iteration != 1 and (
-            abs(dt1)  > threshold_dt or \
-            abs(_dt1) > threshold_dt or \
-            abs(df1)  > threshold_df
-        ):
-            logger.warning(
-                "      Interrupted due spurious signal:",
-                extra={"details": [
-                    f"early dt       = {dt1:10.0f} ns",
-                    f"late dt        = {_dt1:10.0f} ns",
-                    f"threshold dt   = {threshold_dt:10.0f} ns",
-                    f"current df     = {df1*1e6:10.4f} ppm",
-                    f"threshold df   = {threshold_df*1e6:10.4f} ppm",
-            ]})
-            break
+            # Some guard rails to make sure results make sense
+            # Something went wrong with peak searching, to return intermediate
+            # results which are likely near correct values.
+            # TODO(2024-01-31): Fix this.
+            buffer = 10
+            threshold_dt = buffer*max(abs(dt), 1)
+            threshold_df = buffer*max(abs(f-1), 1e-9)
+            if curr_iteration != 1 and (
+                abs(dt1)  > threshold_dt or \
+                abs(_dt1) > threshold_dt or \
+                abs(df1)  > threshold_df
+            ):
+                logger.warning(
+                    "      Interrupted due spurious signal:",
+                    extra={"details": [
+                        f"early dt       = {dt1:10.0f} ns",
+                        f"late dt        = {_dt1:10.0f} ns",
+                        f"threshold dt   = {threshold_dt:10.0f} ns",
+                        f"current df     = {df1*1e6:10.4f} ppm",
+                        f"threshold df   = {threshold_df*1e6:10.4f} ppm",
+                ]})
+                break
 
+            # Stop attempting frequency compensation if low enough
+            if abs(df1) < TARGET_DF:
+                do_frequency_compensation = False
+                logger.debug("      Disabling frequency compensation.")
 
         # Apply recursive relations
         #   A quick proof (note dt -> t):
@@ -372,7 +379,7 @@ def fpfind(
         e = PeakFindingFailed(
             "", resolution=target_resolution, dt=dt, df=f-1,
         )
-        logger.info(f"Peak found,          {df0*1e6:7.3f} ppm: {str(e)}")
+        logger.info(f"Peak found, precomp: {df0*1e6:7.3f} ppm: {str(e)}")
         # TODO: Justify the good enough frequency value
         # TODO(2024-01-31): Add looping code to customize refinement steps.
         if precompensation_fullscan:
@@ -564,7 +571,7 @@ def main():
     num_bins = (1 << args.buffer_order)
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
-    minimum_duration = (args.separation + 1) * Ta
+    minimum_duration = (args.separation + 2) * Ta
     logger.debug("Reading timestamps...", extra={"details": [
         f"Required duration: {minimum_duration*1e-9:.1f}s "
         f"(cross-corr {Ta*1e-9:.1f}s)",
