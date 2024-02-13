@@ -29,7 +29,7 @@ from pathlib import Path
 import configargparse
 import numpy as np
 
-from fpfind.lib.parse_timestamps import read_a1
+from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
 from fpfind.lib.constants import (
     EPOCH_LENGTH, MAX_FCORR, NTP_MAXDELAY_NS, PeakFindingFailed,
 )
@@ -159,7 +159,7 @@ def time_freq(
         # avoids event overflow/underflow
         max_wraps = np.floor(end_time / (resolution * num_bins))
         num_wraps = np.round(duration / (resolution * num_bins))
-        _duration = min(num_wraps, max_wraps) * resolution * num_bins
+        _duration = max(1, min(num_wraps, max_wraps)) * resolution * num_bins
 
         # Perform cross-correlation
         logger.debug(
@@ -613,8 +613,17 @@ def main():
     elif args.target is not None and args.reference is not None:
         logger.info("  Reading from timestamp files...")
         _is_reading_ts = True
-        alice = read_a1(args.reference, legacy=args.legacy)[0]
-        bob = read_a1(args.target, legacy=args.legacy)[0]
+
+        # Get only required events
+        tas, tae = read_a1_start_end(args.reference, legacy=args.legacy)
+        tbs, tbe = read_a1_start_end(args.target, legacy=args.legacy)
+        start = max(tas, tbs); end = min(tae, tbe)
+        required_duration = (minimum_duration + Ta) * 1e-9 + args.skip_duration  # seconds
+        if end - start < required_duration :
+            logger.warning("  Insufficient timestamp events")
+
+        alice = read_a1(args.reference, legacy=args.legacy, end=start+required_duration)[0]
+        bob = read_a1(args.target, legacy=args.legacy, end=start+required_duration)[0]
 
     else:
         logger.error("Timestamp files/epochs must be supplied with -tT/-dD")
