@@ -150,16 +150,23 @@ def time_freq(
         raise
 
     while True:
-        logger.debug(
-            "    Iteration %s (r=%.1fns)",
-            curr_iteration, resolution,
-        )
-
         # Dynamically adjust 'num_wraps' based on current 'resolution',
-        # avoids event overflow/underflow
+        # avoids event overflow/underflow.
+        #
+        # Previous implementation tried to use as many events as possible
+        # This became a problem when fine-tuning the timing resolution, due
+        # to the presence of multiple peaks under a clock skew, which will now
+        # be resolvable. Instead, it is sufficient to force the same 'num_wraps'.
+        #
+        # TODO(2024-02-14): Account for the separation time when calculating
+        #                   'max_wraps'.
         max_wraps = np.floor(end_time / (resolution * num_bins))
-        num_wraps = np.round(duration / (resolution * num_bins))
-        _duration = max(1, min(num_wraps, max_wraps)) * resolution * num_bins
+        _num_wraps = min(num_wraps, max(max_wraps, 1))  # bounded by 1 <= k <= k_max
+        _duration = _num_wraps * resolution * num_bins
+        logger.debug(
+            "    Iteration %s (r=%.1fns, k=%d)",
+            curr_iteration, resolution, _num_wraps,
+        )
 
         # Perform cross-correlation
         logger.debug(
@@ -373,6 +380,9 @@ def fpfind(
             continue
 
         # Refine estimates, using the same recursive relations
+        # TODO(2024-02-14): Confirm if the timing needs to be further refined by
+        #     the precompensation frequency. Empirical tests suggest the 'dt'
+        #     returned from fpfind is more accurate than the
         dt += f * dt1
         f *= (1 + df1)
         logger.debug("  Applied another %.4f ppm compensation.", df1*1e6)
