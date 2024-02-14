@@ -47,6 +47,10 @@ logger = get_logger(__name__, human_readable=True)
 # For internal use only.
 _ENABLE_BREAKPOINT = False
 
+# Allow fpfind to automatically perform recovery actions when
+# insufficient coincidences is assumed to be in the cross-correlation calculation
+_NUM_WRAPS_LIMIT = 0
+
 # Controls learning rate, i.e. how much to decrease resolution by
 RES_REFINE_FACTOR = np.sqrt(2)
 
@@ -224,6 +228,30 @@ def time_freq(
             dt1 = get_timing_delay_fft(ys, xs)[0]
             sig = get_statistics(ys, resolution).significance
 
+        # Calculate some thresholds to catch when peak was likely not found
+        buffer = 10
+        threshold_dt = buffer*max(abs(dt), 1)
+        threshold_df = buffer*max(abs(f-1), 1e-9)
+
+        # If the duration has too few coincidences, the peak may not
+        # show up at all. A peak is likely to have already been found, if
+        # the current iteration is more than 1. Attempt to retry with
+        # larger 'num_wraps' if enabled in settings.
+        if curr_iteration != 1 and abs(dt1) > threshold_dt:
+            logger.warning(
+                "      Interrupted due spurious signal:",
+                extra={"details": [
+                    f"early dt       = {dt1:10.0f} ns",
+                    f"threshold dt   = {threshold_dt:10.0f} ns",
+            ]})
+            if num_wraps < _NUM_WRAPS_LIMIT:
+                num_wraps += 1
+                logger.debug(
+                    "      Reattempting with k = %d due missing peak.",
+                    num_wraps,
+                )
+                continue
+
         # Catch if timing delay exceeded
         if abs(dt1) > NTP_MAXDELAY_NS:
             raise PeakFindingFailed(
@@ -254,12 +282,7 @@ def time_freq(
             # Some guard rails to make sure results make sense
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
-            # TODO(2024-01-31): Fix this.
-            buffer = 10
-            threshold_dt = buffer*max(abs(dt), 1)
-            threshold_df = buffer*max(abs(f-1), 1e-9)
             if curr_iteration != 1 and (
-                abs(dt1)  > threshold_dt or \
                 abs(_dt1) > threshold_dt or \
                 abs(df1)  > threshold_df
             ):
@@ -272,7 +295,22 @@ def time_freq(
                         f"current df     = {df1*1e6:10.4f} ppm",
                         f"threshold df   = {threshold_df*1e6:10.4f} ppm",
                 ]})
-                break
+                if num_wraps < _NUM_WRAPS_LIMIT:
+                    num_wraps += 1
+                    logger.debug(
+                        "      Reattempting with k = %d due missing peak.",
+                        num_wraps,
+                    )
+                    continue
+
+                break  # terminate if recovery not enabled
+
+            # Catch if timing delay exceeded
+            if abs(_dt1) > NTP_MAXDELAY_NS:
+                raise PeakFindingFailed(
+                    "Time delay OOB  ",
+                    significance=sig, resolution=resolution, dt1=_dt1,
+                )
 
             # Stop attempting frequency compensation if low enough
             if abs(df1) < TARGET_DF:
@@ -436,7 +474,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global _ENABLE_BREAKPOINT
+    global _ENABLE_BREAKPOINT, _NUM_WRAPS_LIMIT
     script_name = Path(sys.argv[0]).name
     parser = configargparse.ArgumentParser(
         default_config_files=[f"{script_name}.default.conf"],
@@ -508,6 +546,9 @@ def main():
         "-k", "--num-wraps", metavar="", type=int, default=1,
         help="Specify number of arrays to wrap (default: %(default)d)")
     pgroup_fpfind.add_argument(
+        "-K", "--num-wraps-limit", metavar="", type=int, default=4,
+        help="Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)")
+    pgroup_fpfind.add_argument(
         "-q", "--buffer-order", metavar="", type=int, default=26,
         help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
     pgroup_fpfind.add_argument(
@@ -573,6 +614,10 @@ def main():
     # Set experimental mode
     if args.experiment:
         _ENABLE_BREAKPOINT = True
+
+    # Set timing recovery mode
+    if args.num_wraps_limit > 0:
+        _NUM_WRAPS_LIMIT = int(args.num_wraps_limit)
 
     # Verify minimum duration has been imported
     num_bins = (1 << args.buffer_order)
