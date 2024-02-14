@@ -380,10 +380,7 @@ def fpfind(
             continue
 
         # Refine estimates, using the same recursive relations
-        # TODO(2024-02-14): Confirm if the timing needs to be further refined by
-        #     the precompensation frequency. Empirical tests suggest the 'dt'
-        #     returned from fpfind is more accurate than the corrected value.
-        dt = dt1  # as per TODO above: dt += f * dt1
+        dt += f * dt1
         f *= (1 + df1)
         logger.debug("  Applied another %.4f ppm compensation.", df1*1e6)
         e = PeakFindingFailed(
