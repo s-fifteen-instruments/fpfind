@@ -684,18 +684,43 @@ def main():
         precompensation_fullscan=args.precomp_fullscan,
     )
 
-    # Vary output depending output verbosity value
-    # Invert results, i.e. 'target' and 'reference' timestamps swapped
-    # Use if the low-count side is undergoing frequency correction
+    # To understand the options below, we first clarify some definitions:
+    #   - To apply a frequency difference is to apply an additional clock
+    #     skew to the target timestamp events, i.e.  ts * (1 + df).
+    #       - In the context of timing difference:   ts + dt
+    #   - To compensate for a frequency difference is to undo the clock
+    #     skew present in the target events, i.e.    ts / (1 + df)
+    #       - In the context of timing difference:   ts - dt
+    #   - 'fpfind' calculates the *compensation* frequency for the target,
+    #     and the *compensation* timing prior to frequency compensation,
+    #     i.e.  (ts - dt) / (1 + df)
+    #       - This is equivalent to applying the frequency difference to
+    #         the reference, *then* applying the timing difference,
+    #         i.e.  Ts * (1 + df) + dt
+    #   - To invert this relation is to have the results be *applied* to
+    #     the target (vis a vis *compensated* for the reference), i.e.
+    #           ts * (1 + dF) + dT
+    #           (Ts - dT) / (1 + dF)
+    #       - This convention is followed by the qcrypto stack, where
+    #         'freqcd' first applies the freq diff to the target, before
+    #         downstream 'costream' corrects and tracks the timing diff.
+    #   - This implies the inversion is represented by:
+    #        dT = -dt / (1 + df)
+    #        dF = 1 / (1 + df) - 1
+
+    # Modify output based on flags
     flag = args.output
     if flag & 0b0001:
-        dt = -dt * (1 + df)    # t_alice * (1 + f_alice) + t_bob = 0
-        df = 1 / (1 + df) - 1  # (1 + f_alice) * (1 + f_bob) = 1
-    if flag & 0b0010:
-        df = f"{round(df * (1 << 34)):d}"
-    if flag & 0b1000:
-        dt *= 8
+        dt = -dt / (1 + df)
+        df = 1 / (1 + df) - 1
 
+    # Convert into special bases
+    if flag & 0b0010:
+        df = f"{round(df * (1 << 34)):d}"  # units of 2**-34 as per freqcd
+    if flag & 0b1000:
+        dt *= 8  # units of 1/8ns as per qcrypto
+
+    # Generate output, and add timing value if requested
     output = f"{df}\t"
     if not (flag & 0b0100):
         output += f"{round(dt):d}\t"
