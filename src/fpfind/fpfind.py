@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Calculate frequency and time offsets between two parties.
 
-The timestamps observed by either party can be either in the form of a
-timestamp file in 'a1' format as defined in the timestamp device filespec,
-or as epoch files 'T1'(t1dir)/'T2'(senddir) as defined in the qcrypto
-filespec.
+The timestamps can either be as 'a1' timestamp files (per readevents),
+or as 'T1'/'T2' epoch files (per qcrypto).
 
-The time offset itself evolves over time when clock skew is present.
-Here we define the reference time as the common starting time of the
-observed timestamps of both parties, and the time offset defined at said
-reference time.
+Since the time offset will evolve with clock skew, the reference time is defined
+as the common starting time of both parties, and the time offset at said reference.
 
-To scan for possible precompensations, use the '--precomp-enable' and
-'--precomp-ordered' flags, with INFO verbosity '-v'.
+The results are written to stdout, in the order -
+df (absolute), \\t, dt (ns) - where 'df' is the compensating
+frequency offset and 'dt' the compensating timing offset for the target
+timestamps, i.e. '(TARGET - dt) / (1 + df)'.
+
+To scan for possible precompensations, use the '--precomp-enable' flag.
+For more detailed options, use multiple help flags.
 
 Changelog:
     2023-01-09, Justin: Refactoring from fpfind.py
@@ -476,132 +477,150 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 def main():
     global _ENABLE_BREAKPOINT, _NUM_WRAPS_LIMIT
     script_name = Path(sys.argv[0]).name
-    parser = configargparse.ArgumentParser(
-        default_config_files=[f"{script_name}.default.conf"],
-        description=parse_docstring_description(__doc__),
-        formatter_class=ArgparseCustomFormatter,
-        add_help=False,
-    )
 
     # Disable Black formatting
     # fmt: off
 
-    # Display arguments (group with defaults)
-    pgroup_config = parser.add_argument_group("display/configuration")
-    pgroup_config.add_argument(
-        "-h", "--help", action="store_true",
-        help="Show this help message and exit")
-    pgroup_config.add_argument(
-        "-v", "--verbosity", action="count", default=0,
-        help="Specify debug verbosity, e.g. -vv for more verbosity")
-    pgroup_config.add_argument(
-        "-L", "--logging", metavar="",
-        help="Log to file, if specified. Log level follows verbosity.")
-    pgroup_config.add_argument(
-        "--quiet", action="store_true",
-        help="Suppress errors, but will not block logging")
-    pgroup_config.add_argument(
-        "--config", metavar="", is_config_file_arg=True,
-        help="Path to configuration file")
-    pgroup_config.add_argument(
-        "--save", metavar="", is_write_out_config_file_arg=True,
-        help="Path to configuration file for saving, then immediately exit")
-    pgroup_config.add_argument(
-        "--experiment", action="store_true",
-        help=configargparse.SUPPRESS)
+    def make_parser(help_verbosity=1):
+        # Adapted from <https://discuss.python.org/t/advanced-help-for-argparse/20319/2>
+        def adv(description):
+            return description if help_verbosity >= 2 else configargparse.SUPPRESS
+        def advv(description):
+            return description if help_verbosity >= 3 else configargparse.SUPPRESS
+        def advvv(description):
+            return description if help_verbosity >= 4 else configargparse.SUPPRESS
 
-    # Timestamp importing arguments
-    pgroup_ts = parser.add_argument_group("importing timestamps")
-    pgroup_ts.add_argument(
-        "-t", "--reference", metavar="",
-        help="Timestamp file in 'a1' format, from low-count side (reference)")
-    pgroup_ts.add_argument(
-        "-T", "--target", metavar="",
-        help="Timestamp file in 'a1' format, from high-count side")
-    pgroup_ts.add_argument(
-        "-X", "--legacy", action="store_true",
-        help="Parse raw timestamps in legacy mode (default: %(default)s)")
-    pgroup_ts.add_argument(
-        "-Z", "--skip-duration", metavar="", type=float, default=0,
-        help="Specify initial duration to skip, in seconds (default: %(default)s)")
+        parser = configargparse.ArgumentParser(
+            add_config_file_help=help_verbosity >= 2,
+            default_config_files=[f"{script_name}.default.conf"],
+            description=parse_docstring_description(__doc__),
+            formatter_class=ArgparseCustomFormatter,
+            add_help=False,
+        )
 
-    # Epoch importing arguments
-    pgroup_ep = parser.add_argument_group("importing epochs")
-    pgroup_ep.add_argument(
-        "-d", "--sendfiles", metavar="",
-        help="SENDFILES, from low-count side (reference)")
-    pgroup_ep.add_argument(
-        "-D", "--t1files", metavar="",
-        help="T1FILES, from high-count side")
-    pgroup_ep.add_argument(
-        "-e", "--first-epoch", metavar="",
-        help="Specify filename of first overlapping epoch, optional")
-    pgroup_ep.add_argument(
-        "-z", "--skip-epochs", metavar="", type=int, default=0,
-        help="Specify number of initial epochs to skip (default: %(default)d)")
+        # Display arguments (group with defaults)
+        pgroup_config = parser.add_argument_group("display/configuration")
+        pgroup_config.add_argument(
+            "-h", "--help", action="count", default=0,
+            help="Show this help message, with incremental verbosity, e.g. up to -hhh")
+        pgroup_config.add_argument(
+            "-v", "--verbosity", action="count", default=0,
+            help="Specify debug verbosity, e.g. -vv for more verbosity")
+        pgroup_config.add_argument(
+            "-L", "--logging", metavar="",
+            help=adv("Log to file, if specified. Log level follows verbosity"))
+        pgroup_config.add_argument(
+            "--config", metavar="", is_config_file_arg=True,
+            help=adv("Path to configuration file"))
+        pgroup_config.add_argument(
+            "--save", metavar="", is_write_out_config_file_arg=True,
+            help=adv("Path to configuration file for saving, then immediately exit"))
+        pgroup_config.add_argument(
+            "--experiment", action="store_true",
+            help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
 
-    # fpfind parameters
-    pgroup_fpfind = parser.add_argument_group("fpfind parameters")
-    pgroup_fpfind.add_argument(
-        "-k", "--num-wraps", metavar="", type=int, default=1,
-        help="Specify number of arrays to wrap (default: %(default)d)")
-    pgroup_fpfind.add_argument(
-        "-K", "--num-wraps-limit", metavar="", type=int, default=4,
-        help="Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)")
-    pgroup_fpfind.add_argument(
-        "-q", "--buffer-order", metavar="", type=int, default=26,
-        help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
-    pgroup_fpfind.add_argument(
-        "-R", "--initial-res", metavar="", type=int, default=16,
-        help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
-    pgroup_fpfind.add_argument(
-        "-r", "--final-res", metavar="", type=int, default=1,
-        help="Specify desired fine timing resolution, in units of ns (default: %(default)dns)")
-    pgroup_fpfind.add_argument(
-        "-s", "--separation", metavar="", type=float, default=6,
-        help="Specify width of separation, in units of epochs (default: %(default).1f)")
-    pgroup_fpfind.add_argument(
-        "-S", "--threshold", metavar="", type=float, default=6,
-        help="Specify the statistical significance threshold (default: %(default).1f)")
-    pgroup_fpfind.add_argument(
-        "-V", "--output", metavar="", type=int, default=0, choices=range(1<<4),
-        help=f"{ArgparseCustomFormatter.RAW_INDICATOR}"
-            "Specify output verbosity. Results are tab-delimited (default: %(default)d).\n"
-            "- Setting bit 0 inverts the freq and time compensations\n"
-            "- Setting bit 1 changes freq units, from abs to 2^-34\n"
-            "- Setting bit 2 removes time compensation\n"
-            "- Setting bit 3 changes time units, from 1ns to 1/8ns"
-    )
+        # Timestamp importing arguments
+        pgroup_ts = parser.add_argument_group("importing timestamps")
+        pgroup_ts.add_argument(
+            "-t", "--reference", metavar="",
+            help="Timestamp file in 'a1' format, from low-count side (reference)")
+        pgroup_ts.add_argument(
+            "-T", "--target", metavar="",
+            help="Timestamp file in 'a1' format, from high-count side")
+        pgroup_ts.add_argument(
+            "-X", "--legacy", action="store_true",
+            help="Parse raw timestamps in legacy mode (default: %(default)s)")
+        pgroup_ts.add_argument(
+            "-Z", "--skip-duration", metavar="", type=float, default=0,
+            help=adv("Specify initial duration to skip, in seconds (default: %(default)s)"))
 
-    # Frequency pre-compensation parameters
-    pgroup_precomp = parser.add_argument_group("frequency precompensation")
-    pgroup_precomp.add_argument(
-        "-P", "--precomp-enable", action="store_true",
-        help="Enable precompensation scanning")
-    pgroup_precomp.add_argument(
-        "--precomp-start", metavar="", type=float, default=0.0,
-        help="Specify the starting value (default: 0ppm)")
-    pgroup_precomp.add_argument(
-        "--precomp-step", metavar="", type=float, default=0.1e-6,
-        help="Specify the step value (default: 0.1ppm)")
-    pgroup_precomp.add_argument(
-        "--precomp-stop", metavar="", type=float, default=10e-6,
-        help="Specify the max scan range, one-sided (default: 10ppm)")
-    pgroup_precomp.add_argument(
-        "--precomp-ordered", action="store_true",
-        help="Test precompensations in increasing order (default: %(default)s)")
-    pgroup_precomp.add_argument(
-        "--precomp-fullscan", action="store_true",
-        help="Force all precompensations to be tested (default: %(default)s)")
+        # Epoch importing arguments
+        pgroup_ep = parser.add_argument_group("importing epochs")
+        pgroup_ep.add_argument(
+            "-d", "--sendfiles", metavar="",
+            help="SENDFILES, from low-count side (reference)")
+        pgroup_ep.add_argument(
+            "-D", "--t1files", metavar="",
+            help="T1FILES, from high-count side")
+        pgroup_ep.add_argument(
+            "-e", "--first-epoch", metavar="",
+            help=adv("Specify filename of first overlapping epoch, optional"))
+        pgroup_ep.add_argument(
+            "-z", "--skip-epochs", metavar="", type=int, default=0,
+            help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
+
+        # fpfind parameters
+        pgroup_fpfind = parser.add_argument_group("fpfind parameters")
+        pgroup_fpfind.add_argument(
+            "-k", "--num-wraps", metavar="", type=int, default=1,
+            help=adv("Specify number of arrays to wrap (default: %(default)d)"))
+        pgroup_fpfind.add_argument(
+            "-K", "--num-wraps-limit", metavar="", type=int, default=4,
+            help=advv("Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)"))
+        pgroup_fpfind.add_argument(
+            "-q", "--buffer-order", metavar="", type=int, default=26,
+            help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
+        pgroup_fpfind.add_argument(
+            "-R", "--initial-res", metavar="", type=int, default=16,
+            help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
+        pgroup_fpfind.add_argument(
+            "-r", "--final-res", metavar="", type=int, default=1,
+            help=adv("Specify desired fine timing resolution, in units of ns (default: %(default)dns)"))
+        pgroup_fpfind.add_argument(
+            "-s", "--separation", metavar="", type=float, default=6,
+            help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
+        pgroup_fpfind.add_argument(
+            "-S", "--threshold", metavar="", type=float, default=6,
+            help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
+        pgroup_fpfind.add_argument(
+            "-V", "--output", metavar="", type=int, default=0, choices=range(1<<4),
+            help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
+                "Specify output verbosity. Results are tab-delimited (default: %(default)d)\n"
+                "- Setting bit 0 inverts the freq and time compensations\n"
+                "- Setting bit 1 changes freq units, from abs to 2^-34\n"
+                "- Setting bit 2 removes time compensation\n"
+                "- Setting bit 3 changes time units, from 1ns to 1/8ns"
+            )
+        )
+
+        # Frequency pre-compensation parameters
+        pgroup_precomp = parser.add_argument_group("frequency precompensation")
+        pgroup_precomp.add_argument(
+            "-P", "--precomp-enable", action="store_true",
+            help="Enable precompensation scanning")
+        pgroup_precomp.add_argument(
+            "--precomp-start", metavar="", type=float, default=0.0,
+            help=adv("Specify the starting value (default: 0ppm)"))
+        pgroup_precomp.add_argument(
+            "--precomp-step", metavar="", type=float, default=0.1e-6,
+            help=adv("Specify the step value (default: 0.1ppm)"))
+        pgroup_precomp.add_argument(
+            "--precomp-stop", metavar="", type=float, default=20e-6,
+            help=adv("Specify the max scan range, one-sided (default: 20ppm)"))
+        pgroup_precomp.add_argument(
+            "--precomp-ordered", action="store_true",
+            help=advv("Test precompensations in increasing order (default: %(default)s)"))
+        pgroup_precomp.add_argument(
+            "--precomp-fullscan", action="store_true",
+            help=advv("Force all precompensations to be tested (default: %(default)s)"))
+
+        return parser
 
     # fmt: on
     # Parse arguments
+    parser = make_parser()
     args = parser.parse_args()
+
+    # Print advanced help if specified
+    if args.help > 0:
+        parser = make_parser(help_verbosity=args.help)
+        parser.print_help(sys.stderr)
+        sys.exit(1)
 
     # Check whether options have been supplied, and print help otherwise
     args_sources = parser.get_source_to_settings_dict().keys()
     config_supplied = any(map(lambda x: x.startswith("config_file"), args_sources))
-    if args.help or (len(sys.argv) == 1 and not config_supplied):
+    if (len(sys.argv) == 1 and not config_supplied):
         parser.print_help(sys.stderr)
         sys.exit(1)
 
