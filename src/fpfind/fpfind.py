@@ -230,7 +230,7 @@ def time_freq(
             sig = get_statistics(ys, resolution).significance
 
         # Calculate some thresholds to catch when peak was likely not found
-        buffer = 10
+        buffer = 1
         threshold_dt = buffer*max(abs(dt), 1)
         threshold_df = buffer*max(abs(f-1), 1e-9)
 
@@ -313,11 +313,6 @@ def time_freq(
                     significance=sig, resolution=resolution, dt1=_dt1,
                 )
 
-            # Stop attempting frequency compensation if low enough
-            if abs(df1) < TARGET_DF:
-                do_frequency_compensation = False
-                logger.debug("      Disabling frequency compensation.")
-
         # Apply recursive relations
         #   A quick proof (note dt -> t):
         #     iter 0 ->  (T - t0)/f0          = T/f0    - (t0/f0)
@@ -352,6 +347,11 @@ def time_freq(
         # Stop if resolution met, otherwise refine resolution
         if resolution == target_resolution:
             break
+
+        # Stop attempting frequency compensation if low enough
+        if abs(df1) < TARGET_DF:
+            do_frequency_compensation = False
+            logger.debug("      Disabling frequency compensation.")
 
         # Update for next iteration
         bts = (bts - dt1) / (1 + df1)
@@ -475,7 +475,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global _ENABLE_BREAKPOINT, _NUM_WRAPS_LIMIT
+    global _ENABLE_BREAKPOINT, _NUM_WRAPS_LIMIT, TARGET_DF, RES_REFINE_FACTOR
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -555,7 +555,7 @@ def main():
             "-k", "--num-wraps", metavar="", type=int, default=1,
             help=adv("Specify number of arrays to wrap (default: %(default)d)"))
         pgroup_fpfind.add_argument(
-            "-K", "--num-wraps-limit", metavar="", type=int, default=4,
+            "--num-wraps-limit", metavar="", type=int, default=4,
             help=advv("Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)"))
         pgroup_fpfind.add_argument(
             "-q", "--buffer-order", metavar="", type=int, default=26,
@@ -570,8 +570,14 @@ def main():
             "-s", "--separation", metavar="", type=float, default=6,
             help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
         pgroup_fpfind.add_argument(
-            "-S", "--threshold", metavar="", type=float, default=6,
+            "-S", "--peak-threshold", metavar="", type=float, default=6,
             help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
+        pgroup_fpfind.add_argument(
+            "--freq-threshold", metavar="", type=float, default=0.1,
+            help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
+        pgroup_fpfind.add_argument(
+            "--convergence-rate", metavar="", type=float, default=np.sqrt(2),
+            help=advv("Specify the rate of fpfind convergence (default: %(default).4f)"))
         pgroup_fpfind.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<4),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
@@ -637,6 +643,14 @@ def main():
     # Set timing recovery mode
     if args.num_wraps_limit > 0:
         _NUM_WRAPS_LIMIT = int(args.num_wraps_limit)
+
+    # Set frequency threshold
+    if args.freq_threshold > 0:
+        TARGET_DF = args.freq_threshold * 1e-9
+
+    # Set convergence rate
+    if args.convergence_rate > 0:
+        RES_REFINE_FACTOR = args.convergence_rate
 
     # Verify minimum duration has been imported
     num_bins = (1 << args.buffer_order)
@@ -739,7 +753,7 @@ def main():
         num_bins=num_bins,
         resolution=args.initial_res,
         target_resolution=args.final_res,
-        threshold=args.threshold,
+        threshold=args.peak_threshold,
         separation_duration=Ts,
         precompensations=precompensations,
         precompensation_fullscan=args.precomp_fullscan,
