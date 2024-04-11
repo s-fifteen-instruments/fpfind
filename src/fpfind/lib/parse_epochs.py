@@ -266,6 +266,7 @@ def extract_bits(msb_size: int, buffer: int, size: int, fileobject=None):
     if size < msb_size and fileobject:
         buffer <<= 32
         buffer += int.from_bytes(fileobject.read(4), byteorder="little")
+        # buffer += fileobject.get_next_int()
         size += 32
 
     # Extract MSB from buffer
@@ -274,6 +275,103 @@ def extract_bits(msb_size: int, buffer: int, size: int, fileobject=None):
     size -= msb_size
     # logging.debug("Extracted %d bytes: %d", msb_size, msb)
     return msb, buffer, size
+
+
+class BufferedFileRead:
+    """Stores internal buffer to minimize overall disk reads.
+
+    Deprecated.
+
+    Note:
+        Written to stand in for the 'fileobject' object in 'extract_bits', so
+        that additional block-based buffering can be performed in-situ.
+    """
+    def __init__(self, f, buffer_size: int = 100_000):
+        self.f = f
+        self.buffer_size = buffer_size
+
+        # Track intermediate buffer
+        self.buffer = b""
+        self.pos = 0
+
+    def read(self, num_bytes: int):
+        # Read desired amount of bytes
+        result = self.buffer[self.pos : self.pos+num_bytes]
+        self.pos += num_bytes
+        if len(result) == num_bytes:
+            return result
+
+        # Insufficient data, load more data into buffer read from file if available
+        self.buffer = self.f.read(self.buffer_size*8)
+        if len(self.buffer) == 0:
+            return None
+
+        # Note shortfall must be less than number of bytes loaded into buffer
+        # TODO: Allow for more data than in buffer read size, i.e. while loop check.
+        shortfall = num_bytes - len(result)
+        result += self.buffer[:shortfall]
+        self.pos = shortfall
+        return result
+
+class BufferedFileRead:
+    """Stores internal buffer to minimize overall disk reads.
+
+    Deprecated.
+
+    Here we use 'np.frombuffer' to bulk process bytestring reads into integers,
+    then use a pointer to track the next integer to read. This is more similar
+    to that in 'costream::get_stream_2'.
+
+    Note:
+        Written to stand in for the 'fileobject' object in 'extract_bits', so
+        that additional block-based buffering can be performed in-situ.
+
+    Usage:
+        >>> f = BufferedFileRead(f)
+        >>> f.get_next_int()  # replaces 'int.from_bytes(f.read(4), "little")'
+    """
+    def __init__(self, f, buffer_size: int = 100_000):
+        self.f = f
+        self.buffer_size = buffer_size
+
+        # Track intermediate buffer
+        self.buffer = []
+        self.pos = 0
+
+    def read(self, num_bytes) -> bytes:
+        """Reads fixed number of bytes.
+
+        Note:
+            Do not use this function except for compatibility reasons - this
+            performs a double conversion from integer then back to bytestring.
+            This is done to align with the new internal buffering method, where
+            bulk processing of 32-bit integers is performed by 'np.frombuffer'.
+
+            This new method the costly call of 'int.from_bytes' on individual
+            32-bits constructs. For an epoch file of 800k events, this improves
+            the readtime from 3.7s to.
+
+            Update: Fake news! Buffering doesn't really help much due to the
+            additional overhead.
+        """
+        assert num_bytes % 4 == 0, "must be read in units of 32-bits"
+        result = []
+        for i in range(num_bytes//4):
+            result.append(self.get_next_int())
+        result = b"".join(map(lambda v: v.to_bytes(4, "little"), [304, 23, 12, 2]))
+        return result
+
+    def get_next_int(self):
+        # Insufficient data, load more data into buffer read from file if available
+        if self.pos == len(self.buffer):
+            self.buffer = np.frombuffer(self.f.read(self.buffer_size*8), dtype="=I")
+            self.pos = 0
+            if len(self.buffer) == 0:
+                return None
+
+        result = self.buffer[self.pos]
+        self.pos += 1
+        return result
 
 
 def read_T2(
@@ -313,6 +411,7 @@ def read_T2(
     buffer = 0
     size = 0  # number of bits in buffer
     with open(filename, "rb") as f:
+        # f = BufferedFileRead(f)
         f.read(24)  # remove header
         while True:
 
@@ -531,6 +630,7 @@ def read_T4(filename: str):
     buffer = 0
     size = 0  # number of bits in buffer
     with open(filename, "rb") as f:
+        # f = BufferedFileRead(f)
         f.read(20)  # remove header
         while True:
 
