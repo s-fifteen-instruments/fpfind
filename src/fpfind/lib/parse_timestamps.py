@@ -182,7 +182,7 @@ def read_a1(
         # Terminate if no more timings readable
         if commenced_reading and len(t) == 0:
             break
-        else:
+        elif len(t) != 0:
             commenced_reading = True
         ts.append(t)
         ps.append(p)
