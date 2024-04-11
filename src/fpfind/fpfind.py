@@ -147,13 +147,6 @@ def time_freq(
     curr_iteration = 1
     do_frequency_compensation = True
 
-    # Custom breakpoint for experimentation
-    if _ENABLE_BREAKPOINT:
-        import matplotlib.pyplot as plt  # for quick plotting
-        a = ats; b = bts
-        globals().update(locals())  # write all local variables to global scope
-        raise
-
     while True:
         # Dynamically adjust 'num_wraps' based on current 'resolution',
         # avoids event overflow/underflow.
@@ -189,6 +182,13 @@ def time_freq(
         xs = np.arange(num_bins) * resolution
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
         sig = get_statistics(ys, resolution).significance
+
+        # Custom breakpoint for experimentation
+        if _ENABLE_BREAKPOINT:
+            import matplotlib.pyplot as plt  # for quick plotting
+            a = ats; b = bts
+            globals().update(locals())  # write all local variables to global scope
+            raise
 
         # Confirm resolution on first run
         # If peak finding fails, 'dt' is not returned here:
