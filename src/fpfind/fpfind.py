@@ -730,7 +730,7 @@ def main():
     })
 
     # Prepare frequency pre-compensations
-    precompensations = [0]
+    precompensations = [args.precomp_start]
     if args.precomp_enable:
         logger.debug("Generating frequency precompensations...")
         precompensations = generate_precompensations(
