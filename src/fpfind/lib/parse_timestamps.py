@@ -369,6 +369,42 @@ def _parse_a1(
     p = data[:, low_pos] & 0xF
     return t, p
 
+def read_a1_overlapping(
+        *filenames,
+        legacy: bool = False,
+        resolution: TSRES = TSRES.NS1,
+        fractional: bool = True,
+        duration: float = None,
+    ):
+    """Reads multiple timestamp files with overlapping durations.
+
+    Convenience function that replaces a common workflow. Streaming is used,
+    and no filtering patterns are used. No detector patterns are also returned.
+
+    If 'duration' is unspecified, the full overlapping timestamps are extracted.
+    Otherwise, the timestamps will be truncated by the corresponding duration,
+    in units of seconds.
+    """
+    # Search for start and end timings
+    timings = np.array([read_a1_start_end(f, legacy=legacy) for f in filenames])
+    start = np.max(timings[:,0])
+    end = np.min(timings[:,1])
+    if duration is not None:
+        if duration > end - start:
+            warnings.warn(f"Duration requested is longer than available data: {duration:.2f}s > {end-start:.2f}s")
+        end = duration + start
+
+    # Extract timestamps only
+    data = [
+        read_a1(
+            filename, legacy=legacy, resolution=resolution, fractional=fractional,
+            start=start, end=end,
+        )
+        for filename in filenames
+    ]
+    timestamps = [r[0] for r in data]
+    return timestamps
+
 
 
 #############
