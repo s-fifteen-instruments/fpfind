@@ -272,7 +272,7 @@ def extract_bits(msb_size: int, buffer: int, size: int, fileobject=None):
     msb = buffer >> (size - msb_size)
     buffer &= (1 << (size - msb_size)) - 1
     size -= msb_size
-    logging.debug("Extracted %d bytes: %d", msb_size, msb)
+    # logging.debug("Extracted %d bytes: %d", msb_size, msb)
     return msb, buffer, size
 
 
