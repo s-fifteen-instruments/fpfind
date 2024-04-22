@@ -20,3 +20,15 @@ fpfind -t {TIMESTAMPS1} -T {TIMESTAMPS2}
 freqcd -x -df 568 < {TIMESTAMPS}
 parse_timestamps -A1 -X -p {TIMESTAMPS}
 ```
+
+----
+
+## Limitations
+
+* The FFT buffer size is limited to 2**31 bins due to the implicit casting to `int32` performed internally by `np.bincount` on older versions of `numpy`. This corresponds to a buffer order value upper bounded to `q = 31` for `fpfind`. To bypass this limitation, supply an alternative implementation for `np.bincount`.
+
+## Troubleshooting
+
+Certain issues may appear when attempting an install on RaspbianOS:
+
+* Importing `numpy` yields the error message stating `libopenblas.so` could not be found (this is the underlying linear algebra library for Numpy); installing the `libopenblas-dev` library fixes this, e.g. `apt install libopenblas-dev`

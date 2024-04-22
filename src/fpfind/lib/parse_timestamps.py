@@ -60,18 +60,8 @@ from collections.abc import Iterator
 import numpy as np
 import tqdm
 
-from fpfind import TSRES
+from fpfind import TSRES, NP_PRECISEFLOAT
 
-# Compilations of numpy that do not include support for 128-bit floats will not
-# expose 'np.float128'. We map such instances directly into a 64-bit float instead.
-# Note that some variants implicitly map 'np.float128' to 'np.float64' as well.
-np_float = np.float64
-if hasattr(np, "float128"):
-    np_float = np.float128
-else:
-    warnings.warn(
-        "128-bit floats unsupported in current numpy version, using 64-bit instead."
-    )
 
 
 
@@ -313,7 +303,7 @@ def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
         e.g. 1GB timestamp file corresponds to 1250 loops.
     """
     if fractional:
-        t = np.array(t, dtype=np_float)
+        t = np.array(t, dtype=NP_PRECISEFLOAT)
         t = t / (TSRES.PS4.value/resolution.value)
     elif resolution is not TSRES.PS4:  # short-circuit
         t = np.array(t, dtype=np.uint64)
@@ -427,7 +417,7 @@ def _consolidate_events(t: list, p: list, resolution: TSRES = TSRES.NS1, sort: b
         float128 is needed, since float64 only encodes 53-bits of precision,
         while the high resolution timestamp has 54-bits precision.
     """
-    data = (np.array(t, dtype=np_float) * (TSRES.PS4.value//resolution.value)).astype(np.uint64) << 10
+    data = (np.array(t, dtype=NP_PRECISEFLOAT) * (TSRES.PS4.value//resolution.value)).astype(np.uint64) << 10
     data += np.array(p).astype(np.uint64)
     if sort:
         data = np.sort(data)

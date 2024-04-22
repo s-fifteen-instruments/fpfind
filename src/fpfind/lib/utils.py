@@ -10,6 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 import scipy
 
+from fpfind import NP_PRECISEFLOAT
 from fpfind.lib.parse_epochs import (
     epoch2int, int2epoch, read_T1, read_T2,
 )
@@ -189,7 +190,7 @@ def generate_fft(
     if len(arr) == 0:
         raise ValueError("Array is empty!")
     bin_arr = np.bincount(
-        np.int64((arr // time_res) % num_bins), minlength=num_bins
+        np.int32((arr // time_res) % num_bins), minlength=num_bins
     )
     return scipy.fft.rfft(bin_arr)
 
@@ -406,7 +407,7 @@ def get_first_overlapping_epoch(
 
 def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
     epochdir = pathlib.Path(dirname)
-    timestamp = np.array([], dtype=np.float128)
+    timestamp = np.array([], dtype=NP_PRECISEFLOAT)
     for i in range(num_of_epochs):
         epoch_name = epochdir / int2epoch(epoch2int(first_epoch) + skip_epoch + i)
         reader = read_T1 if file_type == "T1" else read_T2

@@ -18,7 +18,7 @@ from typing import NamedTuple
 
 import numpy as np
 
-from fpfind import TSRES
+from fpfind import TSRES, NP_PRECISEFLOAT
 from fpfind.lib.logging import get_logger
 
 logger = get_logger(__name__, level="warning")
@@ -212,9 +212,9 @@ def read_T1(
     # Check if need to store floating point
     if fractional:
         # Convert to desired resolution
-        timestamps = np.array(timestamps, dtype=np.float128)
+        timestamps = np.array(timestamps, dtype=NP_PRECISEFLOAT)
         timestamps = timestamps / (TSRES.PS4.value/resolution.value)
-        epoch_msb = np.float128(epoch_msb << 54)
+        epoch_msb = NP_PRECISEFLOAT(epoch_msb << 54)
         epoch_msb = epoch_msb / (TSRES.PS4.value/resolution.value)
 
     # Python integer objects can be arbitrarily long
@@ -456,9 +456,9 @@ def read_T2(
     # Check if need to store floating point
     if fractional:
         # Convert to desired resolution
-        timestamps = np.array(timestamps, dtype=np.float128)
+        timestamps = np.array(timestamps, dtype=NP_PRECISEFLOAT)
         timestamps = timestamps / (TSRES.PS125.value/resolution.value)
-        epoch_msb = np.float128(epoch_msb << 49)
+        epoch_msb = NP_PRECISEFLOAT(epoch_msb << 49)
         epoch_msb = epoch_msb / (TSRES.PS125.value/resolution.value)
 
     # Python integer objects can be arbitrarily long

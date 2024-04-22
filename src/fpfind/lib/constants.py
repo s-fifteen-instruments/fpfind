@@ -1,4 +1,7 @@
 import enum
+import warnings
+
+import numpy as np
 
 class TSRES(enum.Enum):
     """Stores timestamp resolution information.
@@ -16,6 +19,21 @@ NTP_MAXDELAY_NS = 100e6  # 100ms in very asymmetric channels
 
 # Derived constants
 MAX_FCORR = 2**FCORR_AMAXBITS
+
+# Compilations of numpy that do not include support for 128-bit floats will not
+# expose 'np.float128'. We map such instances directly into a 64-bit float instead.
+# Note that some variants implicitly map 'np.float128' to 'np.float64' as well.
+#
+# The availability of this alias depends on the available build flags for numpy,
+# and is platform-dependent. This is usually extended-precision (80-bits) padded
+# to 128-bits for efficiency.
+NP_PRECISEFLOAT = np.float64
+if hasattr(np, "float128"):
+    NP_PRECISEFLOAT = np.float128
+else:
+    warnings.warn(
+        "Extended-precision floats unsupported in current numpy build on this platform: falling back to 64-bit floats instead.\n\nHint: To avoid precision loss when using time taggers with <125ps precision, read timestamps as 64-bit integers instead, e.g. 'read_a1(..., fractional=False)'."
+    )
 
 class PeakFindingFailed(ValueError):
     def __init__(
