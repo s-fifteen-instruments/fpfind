@@ -800,7 +800,7 @@ def main():
     output = f"{df}\t"
     if not (flag & 0b0100):
         output += f"{round(dt):d}\t"
-    if flag & 0b10000:
+    if (flag & 0b10000) and not _is_reading_ts:
         output += f"{first_epoch}\t"
     output = output.rstrip()
     print(output, file=sys.stdout)  # newline auto-added
