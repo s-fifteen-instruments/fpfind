@@ -579,13 +579,14 @@ def main():
             "--convergence-rate", metavar="", type=float, default=np.sqrt(2),
             help=advv("Specify the rate of fpfind convergence (default: %(default).4f)"))
         pgroup_fpfind.add_argument(
-            "-V", "--output", metavar="", type=int, default=0, choices=range(1<<4),
+            "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
                 "Specify output verbosity. Results are tab-delimited (default: %(default)d)\n"
                 "- Setting bit 0 inverts the freq and time compensations\n"
                 "- Setting bit 1 changes freq units, from abs to 2^-34\n"
                 "- Setting bit 2 removes time compensation\n"
-                "- Setting bit 3 changes time units, from 1ns to 1/8ns"
+                "- Setting bit 3 changes time units, from 1ns to 1/8ns\n"
+                "- Setting bit 4 adds first epoch used"
             )
         )
 
@@ -799,6 +800,8 @@ def main():
     output = f"{df}\t"
     if not (flag & 0b0100):
         output += f"{round(dt):d}\t"
+    if flag & 0b10000:
+        output += f"{first_epoch}\t"
     output = output.rstrip()
     print(output, file=sys.stdout)  # newline auto-added
 
