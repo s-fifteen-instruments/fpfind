@@ -392,8 +392,8 @@ def read_a1_overlapping(
         )
         for filename in filenames
     ]
-    timestamps = [r[0] for r in data]
-    return timestamps
+    timestamps, channels = list(zip(*data))
+    return timestamps, channels
 
 
 
