@@ -9,7 +9,8 @@ class TSRES(enum.Enum):
     Values assigned correspond to the number of units within a
     span of 1 nanosecond.
     """
-    NS1 = 1    # S-Fifteen TDC1 timestamp (nominal 2ns resolution)
+    NS2 = 0.5  # S-Fifteen TDC1 timestamp
+    NS1 = 1
     PS125 = 8  # CQT Red timestamp
     PS4 = 256  # S-Fifteen TDC2 timestamp
 
