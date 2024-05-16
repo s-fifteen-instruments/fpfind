@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-"""___MODULE_INFORMATION___
+"""NOT FOR PRODUCTION USE - but in main branch for ease of maintenance ;)
 
 Changelog:
     2024-02-02, Justin: Init
-
-References:
-    [1]:
 """
 
 import logging
@@ -14,8 +11,8 @@ import sys
 import argparse
 import matplotlib.pyplot as plt
 
-import boiler.scriptutil
-import boiler.logging
+import kochen.scriptutil
+import kochen.logging
 from S15lib.g2lib.g2lib import histogram
 
 from fpfind.lib.parse_timestamps import read_a1
@@ -24,20 +21,40 @@ from fpfind.lib.utils import (
     normalize_timestamps, slice_timestamps,
 )
 
+from fpfind.lib.utils import normalize_timestamps
+from fpfind.lib.parse_timestamps import read_a1_overlapping
+
 _ENABLE_BREAKPOINT = False
 logger = logging.getLogger(__name__)
 
-def plotter(alice, bob, freq, time, width, save=False):
+def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
     bob = (bob - time) / (1 + freq*1e-6)
-    ys, xs = histogram(alice, bob, duration=width)
+    ys, xs, stats = histogram(
+        alice, bob, duration=width, resolution=resolution,
+        statistics=True, window=window,
+    )
     # Custom breakpoint for experimentation
     if _ENABLE_BREAKPOINT:
         globals().update(locals())  # write all local variables to global scope
         raise
 
-    plt.plot(xs, ys)
+    elapsed = (alice[-1] - alice[0]) * 1e-9
+    coincidences = stats.signal.sum() - (stats.background.sum() * stats.signal.size / stats.background.size)
+
+    print(f"Totals:")
+    print(f"  S1: {len(alice):d}")
+    print(f"  S2: {len(bob):d}")
+    print(f"  C:  {coincidences:.0f}")
+    print(f"Time elapsed: {elapsed:.3f}s")
+    print(f"  s1: {len(alice)/elapsed:.0f}")
+    print(f"  s2: {len(bob)/elapsed:.0f}")
+    print(f"  sg: {(len(alice)*len(bob))**0.5/elapsed:.0f}")
+    print(f"  c:  {coincidences/elapsed:.0f}")
+
+    plt.plot(xs, ys, linewidth=1)
     plt.xlabel("Delay (ns)")
     plt.ylabel("g(2)")
+    plt.tight_layout()
     if save:
         plt.savefig(save)
     plt.show()
@@ -45,7 +62,7 @@ def plotter(alice, bob, freq, time, width, save=False):
 
 def main():
     global _ENABLE_BREAKPOINT
-    parser = boiler.scriptutil.generate_default_parser(__doc__)
+    parser = kochen.scriptutil.generate_default_parser(__doc__)
 
     # Boilerplate
     pgroup_config = parser.add_argument_group("display/configuration")
@@ -116,6 +133,9 @@ def main():
         "--width", type=float, default=1000,
         help="Specify width of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
+        "--resolution", type=float, default=1,
+        help="Specify resolution of histogram, in units of ns (default: %(default)f)")
+    pgroup.add_argument(
         "--duration", type=float,
         help="Specify duration of timestamps to use, units of s")
     pgroup.add_argument(
@@ -124,9 +144,9 @@ def main():
 
 
     # Parse arguments and configure logging
-    args = boiler.scriptutil.parse_args_or_help(parser)
-    boiler.logging.set_default_handlers(logger, file=args.logging)
-    boiler.logging.set_logging_level(logger, args.verbosity)
+    args = kochen.scriptutil.parse_args_or_help(parser, ignore_unknown=True)
+    kochen.logging.set_default_handlers(logger, file=args.logging)
+    kochen.logging.set_logging_level(logger, args.verbosity)
     logger.debug("%s", args)
 
     # Set experimental mode
@@ -159,8 +179,10 @@ def main():
     elif args.target is not None and args.reference is not None:
         logger.info("  Reading from timestamp files...")
         _is_reading_ts = True
-        alice = read_a1(args.reference, legacy=args.legacy)[0]
-        bob = read_a1(args.target, legacy=args.legacy)[0]
+        (alice, bob), _ = read_a1_overlapping(
+            args.reference, args.target, legacy=args.legacy,
+            duration=args.duration,
+        )
 
     else:
         logger.error("Timestamp files/epochs must be supplied with -tT/-dD")
@@ -170,11 +192,8 @@ def main():
     # frequency compensation will not shift the timing difference too far
     skip = args.skip_duration if _is_reading_ts else 0
     alice, bob = normalize_timestamps(alice, bob, skip=skip)
-    if args.duration is not None:
-        alice = slice_timestamps(alice, 0, args.duration*1e9)
-        bob = slice_timestamps(bob, 0, args.duration*1e9)
 
-    plotter(alice, bob, args.freq, args.time, args.width, save=args.save_plot)
+    plotter(alice, bob, args.freq, args.time, args.width, resolution=args.resolution, save=args.save_plot)
 
 
 if __name__ == "__main__":

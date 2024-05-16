@@ -27,7 +27,8 @@ def round(number, ndigits=None, sf=None, dp=None):
     be supplied, otherwise the behaviour will be undefined.
 
     References:
-        [1]: Original source, https://stackoverflow.com/a/48812729
+        [1]: Original source, <https://stackoverflow.com/a/48812729>
+        [2]: Rounding as vallue, <https://stackoverflow.com/a/59888924>
     """
     # 'dp' overrides 'ndigits' keyword
     if ndigits is not None and dp is None:
@@ -38,6 +39,11 @@ def round(number, ndigits=None, sf=None, dp=None):
         return inbuilt_round(number, dp)
 
     # Perform rounding
+    x = np.asarray(number)
+    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10**(sf-1))
+    mags = 10 ** (sf - 1 - np.floor(np.log10(x_positive)))
+    return inbuilt_round(np.round(x * mags) / mags)
+
     intermediate = float('{:.{p}g}'.format(number, p=sf))
     if isinstance(number, int):
         return int(intermediate)  # preserve as int even when very large

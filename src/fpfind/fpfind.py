@@ -586,7 +586,7 @@ def main():
             "--convergence-rate", metavar="", type=float, default=np.sqrt(2),
             help=advv("Specify the rate of fpfind convergence (default: %(default).4f)"))
         pgroup_fpfind.add_argument(
-            "--quick", action="store_true",
+            "-f", "--quick", action="store_true",
             help=advv("Returns the first iteration results immediately"))
         pgroup_fpfind.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
@@ -758,11 +758,11 @@ def main():
     })
 
     # Prepare frequency pre-compensations
-    precompensations = [args.precomp_start]
+    precompensations = [args.df]
     if args.precomp_enable:
         logger.debug("Generating frequency precompensations...")
         precompensations = generate_precompensations(
-            args.precomp_start,
+            args.df,
             args.precomp_stop,
             args.precomp_step,
             ordered=args.precomp_ordered,
