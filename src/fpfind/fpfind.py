@@ -114,6 +114,7 @@ def time_freq(
         target_resolution: float,
         threshold: float,
         separation_duration: float,
+        quick: bool,
     ):
     """Perform the actual frequency compensation routine.
 
@@ -348,6 +349,10 @@ def time_freq(
         if resolution == target_resolution:
             break
 
+        # Terminate immediately if 'quick' results desired
+        if quick:
+            break
+
         # Stop attempting frequency compensation if low enough
         if abs(df1) < TARGET_DF:
             do_frequency_compensation = False
@@ -375,6 +380,7 @@ def fpfind(
         separation_duration: float,
         precompensations: list,
         precompensation_fullscan: bool = False,
+        quick: bool = False,
     ):
     """Performs fpfind procedure.
 
@@ -413,6 +419,7 @@ def fpfind(
                 alice, (bob - dt)/f,
                 num_wraps, num_bins, resolution, target_resolution,
                 threshold, separation_duration,
+                quick=quick,
             )
         except ValueError as e:
             logger.info(f"Peak finding failed, {df0*1e6:7.3f} ppm: {str(e)}")
@@ -578,6 +585,9 @@ def main():
         pgroup_fpfind.add_argument(
             "--convergence-rate", metavar="", type=float, default=np.sqrt(2),
             help=advv("Specify the rate of fpfind convergence (default: %(default).4f)"))
+        pgroup_fpfind.add_argument(
+            "--quick", action="store_true",
+            help=advv("Returns the first iteration results immediately"))
         pgroup_fpfind.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
@@ -780,6 +790,7 @@ def main():
         separation_duration=Ts,
         precompensations=precompensations,
         precompensation_fullscan=args.precomp_fullscan,
+        quick=args.quick,
     )
 
     # To understand the options below, we first clarify some definitions:
