@@ -590,14 +590,31 @@ def main():
             )
         )
 
+        # Timing pre-compensation parameters
+        #
+        # This is used for further fine-tuning of inter-bin timing values, or an overall shift
+        # to perform a rough timing correction. Since this is a rarely used option, and to
+        # avoid impacting runtime of the original algorithm, this timing precompensation is
+        # performed *before* the shifts in frequency.
+        #
+        # To align with the compensation terminology elucidated in the output inversion
+        # explanation, the reference is compensated for by the timing pre-compensation, i.e. alice.
+        pgroup_tprecomp = parser.add_argument_group("timing precompensation")
+        pgroup_tprecomp.add_argument(
+            "--dt", metavar="", type=float, default=0,
+            help=advvv("Specify initial timing shift, in units of ns (default: %(default)dns)"))
+        pgroup_tprecomp.add_argument(
+            "--dt-use-bins", action="store_true",
+            help=advvv("Change dt units, from ns to timing resolution (i.e. -R)"))
+
         # Frequency pre-compensation parameters
         pgroup_precomp = parser.add_argument_group("frequency precompensation")
         pgroup_precomp.add_argument(
             "-P", "--precomp-enable", action="store_true",
             help="Enable precompensation scanning")
         pgroup_precomp.add_argument(
-            "--precomp-start", metavar="", type=float, default=0.0,
-            help=adv("Specify the starting value (default: 0ppm)"))
+            "--df", "--precomp-start", metavar="", type=float, default=0.0,
+            help=adv("Specify the precompensation value (default: 0ppm)"))
         pgroup_precomp.add_argument(
             "--precomp-step", metavar="", type=float, default=0.1e-6,
             help=adv("Specify the step value (default: 0.1ppm)"))
@@ -745,6 +762,11 @@ def main():
             len(precompensations),
             ",".join(map(lambda p: f"{p*1e6:g}", precompensations[:3])),
         )
+
+    # Perform timing pre-compensation (experimental command)
+    # See notes in CLI definition.
+    if args.dt != 0:
+        alice = alice + args.dt * (args.initial_res if args.dt_use_bins else 1)
 
     # Start fpfind
     logger.debug("Running fpfind...")
