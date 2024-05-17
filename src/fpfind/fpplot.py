@@ -10,6 +10,7 @@ import sys
 
 import argparse
 import matplotlib.pyplot as plt
+import numpy as np
 
 import kochen.scriptutil
 import kochen.logging
@@ -39,17 +40,24 @@ def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
         raise
 
     elapsed = (alice[-1] - alice[0]) * 1e-9
-    coincidences = stats.signal.sum() - (stats.background.sum() * stats.signal.size / stats.background.size)
+    _center = ys[500:1500]
+    _sides = np.array(list(ys[:500]) + list(ys[1500:]))
+    coincidences = np.sum(_center) - np.sum(_sides) * len(_center) / len(_sides)
+    # coincidences = stats.signal.sum() - (stats.background.sum() * stats.signal.size / stats.background.size)
 
+    s1 = len(alice)/elapsed
+    s2 = len(bob)/elapsed
+    c = coincidences/elapsed
     print(f"Totals:")
     print(f"  S1: {len(alice):d}")
     print(f"  S2: {len(bob):d}")
     print(f"  C:  {coincidences:.0f}")
     print(f"Time elapsed: {elapsed:.3f}s")
-    print(f"  s1: {len(alice)/elapsed:.0f}")
-    print(f"  s2: {len(bob)/elapsed:.0f}")
+    print(f"  s1: {s1:.0f}")
+    print(f"  s2: {s2:.0f}")
     print(f"  sg: {(len(alice)*len(bob))**0.5/elapsed:.0f}")
-    print(f"  c:  {coincidences/elapsed:.0f}")
+    print(f"  c:  {c:.0f}")
+    print(f"Efficiency: {100*c/np.sqrt(s1*s2):.1f}%")
 
     plt.plot(xs, ys, linewidth=1)
     plt.xlabel("Delay (ns)")
@@ -58,7 +66,14 @@ def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
     if save:
         plt.savefig(save)
     plt.show()
+    globals().update(locals())
+    raise
 
+def attenuate(ts, transmission=1):
+    if transmission >= 1:
+        return ts
+    mask = np.random.random(size=ts.size) < transmission
+    return ts[mask]
 
 def main():
     global _ENABLE_BREAKPOINT
@@ -124,13 +139,13 @@ def main():
     # Plotting parameters
     pgroup = parser.add_argument_group("plotting")
     pgroup.add_argument(
-        "--freq", type=float, default=0.0,
+        "--df", type=float, default=0.0,
         help="Specify clock skew, in units of ppm (default: %(default)f)")
     pgroup.add_argument(
-        "--time", type=float, default=0.0,
+        "--dt", type=float, default=0.0,
         help="Specify time delay, in units of ns (default: %(default)f)")
     pgroup.add_argument(
-        "--width", type=float, default=1000,
+        "--width", type=float, default=2000,
         help="Specify width of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
         "--resolution", type=float, default=1,
@@ -193,7 +208,10 @@ def main():
     skip = args.skip_duration if _is_reading_ts else 0
     alice, bob = normalize_timestamps(alice, bob, skip=skip)
 
-    plotter(alice, bob, args.freq, args.time, args.width, resolution=args.resolution, save=args.save_plot)
+    alice = attenuate(alice, 1)
+    bob = attenuate(bob, 1)
+
+    plotter(alice, bob, args.df, args.dt, args.width, resolution=args.resolution, save=args.save_plot)
 
 
 if __name__ == "__main__":
