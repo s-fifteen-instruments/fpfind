@@ -149,7 +149,7 @@ def main():
         "--width", type=float, default=1000,
         help="Specify one-sided width of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
-        "-r", "--resolution", type=float, default=1,
+        "-r", "--resolution", "--final-res", type=float, default=1,
         help="Specify resolution of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
         "--duration", type=float, default=1,
