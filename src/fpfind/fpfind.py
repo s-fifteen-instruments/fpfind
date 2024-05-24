@@ -187,8 +187,10 @@ def time_freq(
         ys = get_xcorr(afft, bfft)
 
         # Calculate timing delay
-        # TODO(2024-01-31): Add option to check other timing candidate.
-        xs = np.arange(num_bins) * resolution
+        _dtype = np.int32  # signed number needed for negative delays
+        if num_bins * resolution > 2147483647:  # int32 max
+            _dtype = np.int64
+        xs = np.arange(num_bins, dtype=_dtype) * resolution
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
         sig = get_statistics(ys, resolution).significance
 
