@@ -12,6 +12,7 @@ import argparse
 import matplotlib.pyplot as plt
 import numpy as np
 
+import kochen  # v0.2024.4
 import kochen.scriptutil
 import kochen.logging
 from S15lib.g2lib.g2lib import histogram
@@ -77,7 +78,7 @@ def attenuate(ts, transmission=1):
 
 def main():
     global _ENABLE_BREAKPOINT
-    parser = kochen.scriptutil.generate_default_parser(__doc__)
+    parser = kochen.scriptutil.generate_default_parser(__doc__, "fpfind")
 
     # Boilerplate
     pgroup_config = parser.add_argument_group("display/configuration")
@@ -145,14 +146,14 @@ def main():
         "--dt", type=float, default=0.0,
         help="Specify time delay, in units of ns (default: %(default)f)")
     pgroup.add_argument(
-        "--width", type=float, default=2000,
-        help="Specify width of histogram, in units of ns (default: %(default)f)")
+        "--width", type=float, default=1000,
+        help="Specify one-sided width of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
-        "--resolution", type=float, default=1,
+        "-r", "--resolution", type=float, default=1,
         help="Specify resolution of histogram, in units of ns (default: %(default)f)")
     pgroup.add_argument(
-        "--duration", type=float,
-        help="Specify duration of timestamps to use, units of s")
+        "--duration", type=float, default=1,
+        help="Specify duration of timestamps to use, units of s (default: %(default)f)")
     pgroup.add_argument(
         "--save-plot",
         help="Specify filename to save the plot to")
@@ -211,7 +212,7 @@ def main():
     alice = attenuate(alice, 1)
     bob = attenuate(bob, 1)
 
-    plotter(alice, bob, args.df, args.dt, args.width, resolution=args.resolution, save=args.save_plot)
+    plotter(alice, bob, args.df, args.dt, 2*args.width, resolution=args.resolution, save=args.save_plot)
 
 
 if __name__ == "__main__":
