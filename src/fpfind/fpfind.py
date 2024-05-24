@@ -48,8 +48,16 @@ logger = get_logger(__name__, human_readable=True)
 # For internal use only.
 _ENABLE_BREAKPOINT = False
 
+# Disables resolution doubling during initial peak search, used to converge
+# on specific fpfind parameters for peak search. This procedure is a relatively
+# cheap measure to increase peak finding yield, and thus is unlikely needed
+# in production.
+# For internal use only.
+_DISABLE_DOUBLING = False
+
 # Allow fpfind to automatically perform recovery actions when
 # insufficient coincidences is assumed to be in the cross-correlation calculation
+# For internal use only.
 _NUM_WRAPS_LIMIT = 0
 
 # Controls learning rate, i.e. how much to decrease resolution by
@@ -215,6 +223,11 @@ def time_freq(
                 break
             else:
                 logger.debug(f"          Rejected")
+                if _DISABLE_DOUBLING:
+                    raise PeakFindingFailed(
+                        "Low significance",
+                        significance=sig, resolution=resolution, dt1=dt1,
+                    )
                 ys = np.sum(ys.reshape(-1, 2), axis = 1)
                 resolution *= 2
 
@@ -482,7 +495,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global _ENABLE_BREAKPOINT, _NUM_WRAPS_LIMIT, TARGET_DF, RES_REFINE_FACTOR
+    global _ENABLE_BREAKPOINT, _DISABLE_DOUBLING, _NUM_WRAPS_LIMIT, TARGET_DF, RES_REFINE_FACTOR
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -579,6 +592,9 @@ def main():
         pgroup_fpfind.add_argument(
             "-S", "--peak-threshold", metavar="", type=float, default=6,
             help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
+        pgroup_fpfind.add_argument(
+            "--disable-doubling", action="store_true",
+            help=advv("Disabling automatic resolution doubling during initial peak search"))
         pgroup_fpfind.add_argument(
             "--freq-threshold", metavar="", type=float, default=0.1,
             help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
@@ -679,6 +695,10 @@ def main():
     # Set convergence rate
     if args.convergence_rate > 0:
         RES_REFINE_FACTOR = args.convergence_rate
+
+    # Disable resolution doubling, if option specified
+    if args.disable_doubling:
+        _DISABLE_DOUBLING = True
 
     # Verify minimum duration has been imported
     num_bins = (1 << args.buffer_order)
