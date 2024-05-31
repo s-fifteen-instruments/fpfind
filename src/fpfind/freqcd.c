@@ -143,7 +143,7 @@ Performs frequency correction of timestamps emitted by qcrypto's readevents.\n\
 Data stream options:\n\
   -i infilename    File/socket name for source events. Defaults to stdin.\n\
   -o outfilename   File/socket name for corrected events. Defaults to stdout.\n\
-  -F freqfilename  File/socket name of frequency correction values.\n\
+  -F freqfilename  File/socket name of frequency correction values (follows '-d').\n\
 \n\
 Encoding options:\n\
   -x               Use legacy timestamp format.\n\
@@ -415,6 +415,7 @@ int main(int argc, char *argv[]) {
                 if (freqbuffer[i] == '\n') {
                     freqbuffer[i] = 0;  // zero-terminate for readint
                     fcorr_tmp = readint(&freqbuffer[next_num_idx]);
+                    if (isdecimal) fcorr_tmp = (int) fcorr_tmp * FCORR_DTOB;
                     if (abs(fcorr_tmp) < FCORR_MAX) fcorr = fcorr_tmp;
 #ifdef __DEBUG__
                     fprintf(stderr, "[debug] 'fcorr' updated to '%d'.\n", fcorr);
