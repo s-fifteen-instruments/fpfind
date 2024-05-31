@@ -117,6 +117,7 @@ char *errormessage[] = {
     "Error opening freq correction stream source",
     "Freq correction value not newline terminated",
     "Unable to allocate memory to freqbuffer",
+    "Error parsing time correction as integer",
 };
 int emsg(int code) {
     fprintf(stderr, "%s\n", errormessage[code]);
@@ -137,8 +138,12 @@ int readint(char *buff) {
 void usage() {
     fprintf(stderr, "\
 Usage: freqcd [-i infilename] [-o outfilename] [-x]\n\
-              [-f freqcorr] [-F freqfilename] [-d]\n\
+              [-t timecorr] [-f freqcorr] [-F freqfilename] [-d]\n\
 Performs frequency correction of timestamps emitted by qcrypto's readevents.\n\
+\n\
+Supports up to a timing resolution of 1/256ns, but should work with 1/8ns and\n\
+2ns timing resolutions as well. An optional static timing correction can be\n\
+applied, after the frequency correction stage.\n\
 \n\
 Data stream options:\n\
   -i infilename    File/socket name for source events. Defaults to stdin.\n\
@@ -146,7 +151,8 @@ Data stream options:\n\
   -F freqfilename  File/socket name of frequency correction values (follows '-d').\n\
 \n\
 Encoding options:\n\
-  -x               Use legacy timestamp format.\n\
+  -X               Use legacy timestamp format.\n\
+  -t timecorr      Timing offset, in units of ps (resolution of 1/256 ns).\n\
   -f freqcorr      Frequency offset, in units of 2^-34 (range: 0-2097151).\n\
   -d               Use units of 0.1ppb for '-f'        (range: 0-1220703).\n\
 \n\
@@ -171,6 +177,7 @@ int main(int argc, char *argv[]) {
 
     /* parse options */
     int fcorr = FCORR_DEFAULT;  // frequency correction value
+    ll tcorr = 0;               // time correction value
     char infilename[FNAMELENGTH] = {};  // store filename
     char outfilename[FNAMELENGTH] = {};  // store filename
     char freqfilename[FNAMELENGTH] = {};  // store filename
@@ -178,7 +185,7 @@ int main(int argc, char *argv[]) {
     int isdecimal = 0;  // mark if frequency input is in decimal units
     int opt;  // for getopt options
     opterr = 0;  // be quiet when no options supplied
-    while ((opt = getopt(argc, argv, "i:o:F:f:xdh")) != EOF) {
+    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXdh")) != EOF) {
         switch (opt) {
         case 'i':
             if (sscanf(optarg, FNAMEFORMAT, infilename) != 1) return -emsg(2);
@@ -195,7 +202,14 @@ int main(int argc, char *argv[]) {
         case 'f':
             if (sscanf(optarg, "%d", &fcorr) != 1) return -emsg(4);
             break;
-        case 'x':
+        case 't':
+            if (sscanf(optarg, "%lld", &tcorr) != 1) return -emsg(14);
+            tcorr = (ll) tcorr * 0.256;  // convert ps -> 1/256ns units
+            break;
+        case 'x':  // retained for legacy purposes, use '-X' instead
+            islegacy = 1;
+            break;
+        case 'X':
             islegacy = 1;
             break;
         case 'd':
@@ -273,7 +287,8 @@ int main(int argc, char *argv[]) {
     int isset_tsref = 0;    // initialization marker for tsref
     ull ts, tsmeas;         // timestamp
     ll tscorr;              // timestamp correction
-    ll tsoverflowcorr = 0;  // timestamp overflow corrections
+    ll tsoverflowcorr = tcorr;  // timestamp overflow corrections
+                                // overloading with the desired post-freq timing corr
     unsigned int high;      // high word in timestamp
     unsigned int low;       // low word in timestamp
     unsigned int _swp;      // temporary swap variable, support 'legacy' option
