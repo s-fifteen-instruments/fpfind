@@ -29,8 +29,8 @@
 
 
    usage:
-     freqcd [-i infilename] [-o outfilename] [-x]
-            [-f freqcorr] [-F freqfilename] [-d]
+     freqcd [-i infilename] [-o outfilename] [-X]
+            [-t timecorr] [-f freqcorr] [-F freqfilename] [-d]
 
 
    DATA STREAM OPTIONS:
@@ -48,19 +48,23 @@
                       If unspecified, the frequency offset will be static.
 
    ENCODING OPTIONS:
-     -x:              Specifies if both the raw input and output data streams
+     -X:              Specifies if both the raw input and output data streams
                       are to be read in legacy format, as specified in the
                       timestamp unit.
+     -t timecorr:     Timing offset of the timestamps, in units of ps. If
+                      unspecified, offset = 0. The ps unit is chosen for
+                      legibility; the actual resolution is 1/256ns (~4ps),
+                      in line with the high resolution timestamp spec.
      -f freqcorr:     Frequency offset of the current clock relative to some
                       reference clock, in units of 2^-34 (or 0.6e-10).
                       If unspecified, offset = 0. Maximum absolute value is
                       2097151 (i.e. 2^21-1), see [1] for explanation.
      -d:              Decimal mode. Changes the frequency offset read by '-f'
-                      to be in units of 0.1 ppb instead, with maximum absolute
-                      value of 1220703 (i.e. 2^-13). For human-readability.
+                      and '-F' to be in units of 0.1 ppb instead, with
+                      maximum absolute value of 1220703 (i.e. 2^-13). For
+                      human-readability.
 
    Potential improvements:
-     - Allow customization of frequency correction units (using 128-bit?)
      - Consider using epoll() if necessary
      - Merge write procedure with select() call
      - Optimize buffer parameters
@@ -137,24 +141,24 @@ int readint(char *buff) {
 
 void usage() {
     fprintf(stderr, "\
-Usage: freqcd [-i infilename] [-o outfilename] [-x]\n\
+Usage: freqcd [-i infilename] [-o outfilename] [-X]\n\
               [-t timecorr] [-f freqcorr] [-F freqfilename] [-d]\n\
 Performs frequency correction of timestamps emitted by qcrypto's readevents.\n\
 \n\
 Supports up to a timing resolution of 1/256ns, but should work with 1/8ns and\n\
 2ns timing resolutions as well. An optional static timing correction can be\n\
-applied, after the frequency correction stage.\n\
+applied.\n\
 \n\
 Data stream options:\n\
   -i infilename    File/socket name for source events. Defaults to stdin.\n\
   -o outfilename   File/socket name for corrected events. Defaults to stdout.\n\
-  -F freqfilename  File/socket name of frequency correction values (follows '-d').\n\
+  -F freqfilename  File/socket name of frequency correction values.\n\
 \n\
 Encoding options:\n\
   -X               Use legacy timestamp format.\n\
   -t timecorr      Timing offset, in units of ps (resolution of 1/256 ns).\n\
   -f freqcorr      Frequency offset, in units of 2^-34 (range: 0-2097151).\n\
-  -d               Use units of 0.1ppb for '-f'        (range: 0-1220703).\n\
+  -d               Use units of 0.1ppb for '-f'/'-F'   (range: 0-1220703).\n\
 \n\
 Shows this help with '-h' option. More descriptive documentation:\n\
 <https://github.com/s-fifteen-instruments/fpfind/blob/main/src/fpfind/freqcd.c>\n\
@@ -288,7 +292,7 @@ int main(int argc, char *argv[]) {
     ull ts, tsmeas;         // timestamp
     ll tscorr;              // timestamp correction
     ll tsoverflowcorr = tcorr;  // timestamp overflow corrections
-                                // overloading with the desired post-freq timing corr
+                                // overloading with the desired timing corr
     unsigned int high;      // high word in timestamp
     unsigned int low;       // low word in timestamp
     unsigned int _swp;      // temporary swap variable, support 'legacy' option
