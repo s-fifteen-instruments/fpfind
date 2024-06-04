@@ -19,6 +19,7 @@ FCORR_AMAXBITS = -13  # from 'freqcd.c'
 NTP_MAXDELAY_NS = 100e6  # 100ms in very asymmetric channels
 
 # Derived constants
+EPOCH_DURATION = EPOCH_LENGTH * 1e-9  # in seconds
 MAX_FCORR = 2**FCORR_AMAXBITS
 
 # Compilations of numpy that do not include support for 128-bit floats will not
