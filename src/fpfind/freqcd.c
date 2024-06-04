@@ -211,8 +211,6 @@ int main(int argc, char *argv[]) {
             tcorr = (ll) tcorr * 0.256;  // convert ps -> 1/256ns units
             break;
         case 'x':  // retained for legacy purposes, use '-X' instead
-            islegacy = 1;
-            break;
         case 'X':
             islegacy = 1;
             break;
