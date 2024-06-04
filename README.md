@@ -17,7 +17,8 @@ Binaries and scripts will be exposed to the path; commonly used scripts are list
 
 ```bash
 fpfind -t {TIMESTAMPS1} -T {TIMESTAMPS2}
-freqcd -x -df 568 < {TIMESTAMPS}
+freqcd -X -udF fpipe -f 568 < {TIMESTAMPS}
+[costream -V5 ... |] freqservo -V5 -udF fpipe -f 568
 parse_timestamps -A1 -X -p {TIMESTAMPS}
 ```
 
