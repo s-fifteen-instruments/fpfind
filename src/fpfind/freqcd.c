@@ -30,7 +30,7 @@
 
    usage:
      freqcd [-i infilename] [-o outfilename] [-X]
-            [-t timecorr] [-f freqcorr] [-F freqfilename] [-d]
+            [-t timecorr] [-f freqcorr] [-F freqfilename] [-d] [-u]
 
 
    DATA STREAM OPTIONS:
@@ -63,6 +63,13 @@
                       and '-F' to be in units of 0.1 ppb instead, with
                       maximum absolute value of 1220703 (i.e. 2^-13). For
                       human-readability.
+     -u:              Update mode. Changes the frequencies read by '-F' to
+                      represent frequency differentials instead, i.e. the
+                      current frequency offset is shifted by df' rather than
+                      replaced with df, given by:
+
+                          df = (1+df)*(1+df')-1
+                             ≈ df+df' (to nearest 0.1ppb, if df*df' < 0.05ppb)
 
    Potential improvements:
      - Consider using epoll() if necessary
@@ -80,7 +87,7 @@
 #include <unistd.h>  // getopt, select
 #include <errno.h>   // select errno
 #include <limits.h>  // INT_MAX
-#include <math.h>    // pow(..., 10)
+#include <math.h>    // pow(..., 10), round(...)
 
 /* default definitions */
 #define FNAMELENGTH 200            /* length of file name buffers */
@@ -142,12 +149,12 @@ int readint(char *buff) {
 void usage() {
     fprintf(stderr, "\
 Usage: freqcd [-i infilename] [-o outfilename] [-X]\n\
-              [-t timecorr] [-f freqcorr] [-F freqfilename] [-d]\n\
+              [-t timecorr] [-f freqcorr] [-F freqfilename] [-d] [-u]\n\
 Performs frequency correction of timestamps emitted by qcrypto's readevents.\n\
 \n\
 Supports up to a timing resolution of 1/256ns, but should work with 1/8ns and\n\
 2ns timing resolutions as well. An optional static timing correction can be\n\
-applied.\n\
+applied. If '-u' is not supplied, reads from '-F' replace the current freq.\n\
 \n\
 Data stream options:\n\
   -i infilename    File/socket name for source events. Defaults to stdin.\n\
@@ -159,6 +166,7 @@ Encoding options:\n\
   -t timecorr      Timing offset, in units of ps (resolution of 1/256 ns).\n\
   -f freqcorr      Frequency offset, in units of 2^-34 (range: 0-2097151).\n\
   -d               Use units of 0.1ppb for '-f'/'-F'   (range: 0-1220703).\n\
+  -u               Modify current frequency relative to reads from '-F'.\n\
 \n\
 Shows this help with '-h' option. More descriptive documentation:\n\
 <https://github.com/s-fifteen-instruments/fpfind/blob/main/src/fpfind/freqcd.c>\n\
@@ -174,6 +182,7 @@ int main(int argc, char *argv[]) {
     const int FCORR_MAX = 1 << (FCORR_AMAXBITS - FCORR_ARESBITS);
     const int FCORR_TBITS1 = -FCORR_AMAXBITS - 1;  // bit truncations when correcting timestamp
     const int FCORR_TBITS2 = (FCORR_AMAXBITS - FCORR_ARESBITS) + 1;
+    const double FCORR_BTO1 = pow(2, FCORR_ARESBITS);
 
     // Conversion factor for decimal mode, i.e. 1e-10/2^-34 = ~1.7179869
     // Ratio inverted due to negative signs in exponents.
@@ -187,9 +196,10 @@ int main(int argc, char *argv[]) {
     char freqfilename[FNAMELENGTH] = {};  // store filename
     int islegacy = 0;  // mark if format is legacy
     int isdecimal = 0;  // mark if frequency input is in decimal units
+    int isupdate = 0;  // mark if relative frequency is used
     int opt;  // for getopt options
     opterr = 0;  // be quiet when no options supplied
-    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXdh")) != EOF) {
+    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXduh")) != EOF) {
         switch (opt) {
         case 'i':
             if (sscanf(optarg, FNAMEFORMAT, infilename) != 1) return -emsg(2);
@@ -216,6 +226,9 @@ int main(int argc, char *argv[]) {
             break;
         case 'd':
             isdecimal = 1;
+            break;
+        case 'u':
+            isupdate = 1;
             break;
         case 'h':
             usage(); exit(1);
@@ -433,10 +446,17 @@ int main(int argc, char *argv[]) {
                     freqbuffer[i] = 0;  // zero-terminate for readint
                     fcorr_tmp = readint(&freqbuffer[next_num_idx]);
                     if (isdecimal) fcorr_tmp = (int) fcorr_tmp * FCORR_DTOB;
-                    if (abs(fcorr_tmp) < FCORR_MAX) fcorr = fcorr_tmp;
+                    if (isupdate) fcorr_tmp = (int)round(((1+fcorr*FCORR_BTO1) * (1+fcorr_tmp*FCORR_BTO1) - 1)/FCORR_BTO1);
+                    if (abs(fcorr_tmp) < FCORR_MAX) {
+                        fcorr = fcorr_tmp;
 #ifdef __DEBUG__
-                    fprintf(stderr, "[debug] 'fcorr' updated to '%d'.\n", fcorr);
+                        if (isdecimal) {
+                            fprintf(stderr, "[debug] 'fcorr' updated to '%.3f' ppb.\n", fcorr / FCORR_DTOB / 10);
+                        } else {
+                            fprintf(stderr, "[debug] 'fcorr' updated to '%d' x 2^-34.\n", fcorr);
+                        }
 #endif
+                    }
                     next_num_idx = i+1;  // continue reading
                 }
             }
