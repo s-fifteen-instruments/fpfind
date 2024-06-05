@@ -101,7 +101,11 @@
 #define FCORR_AMAXBITS -13         /* absolute maximum allowed correction, in power of 2 */
 #define FCORR_DEFAULT 0            /* frequency correction in units of 2^FCORR_ARESBITS */
 #define FCORR_ARESDECIMAL -10      /* absolute resolution of correction, in power of 10, specifically for '-d' mode */
-//#define __DEBUG__                /* global debug flag, uncomment to disable */
+//#define __DEBUG__                /* global debug flag, uncomment to disable, send -v flag for more debug msgs */
+
+// Formatting colors
+#define COLOR_ERROR "\x1b[31m"
+#define COLOR_RESET "\x1b[0m"
 
 // struct defined in non-legacy format
 typedef struct rawevent {
@@ -130,8 +134,19 @@ char *errormessage[] = {
     "Unable to allocate memory to freqbuffer",
     "Error parsing time correction as integer",
 };
+void wmsg(char *message) {
+    fprintf(stderr, COLOR_ERROR "%s\n" COLOR_RESET, message);
+};
+void wmsg_s(size_t n, char *fmt, char *v) {  // dirty fix for overloading signatures
+    char *buffer = (char *)malloc(n*sizeof(char));
+    snprintf(buffer, n, fmt, v); wmsg(buffer); free(buffer);
+};
+void wmsg_i(size_t n, char *fmt, int v) {
+    char *buffer = (char *)malloc(n*sizeof(char));
+    snprintf(buffer, n, fmt, v); wmsg(buffer); free(buffer);
+};
 int emsg(int code) {
-    fprintf(stderr, "%s\n", errormessage[code]);
+    wmsg(errormessage[code]);
     return code;
 };
 
@@ -197,9 +212,10 @@ int main(int argc, char *argv[]) {
     int islegacy = 0;  // mark if format is legacy
     int isdecimal = 0;  // mark if frequency input is in decimal units
     int isupdate = 0;  // mark if relative frequency is used
+    int isdebugverbose = 0;  // mark if need to show more verbose debug
     int opt;  // for getopt options
     opterr = 0;  // be quiet when no options supplied
-    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXduh")) != EOF) {
+    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXduhv")) != EOF) {
         switch (opt) {
         case 'i':
             if (sscanf(optarg, FNAMEFORMAT, infilename) != 1) return -emsg(2);
@@ -221,6 +237,7 @@ int main(int argc, char *argv[]) {
             tcorr = (ll) tcorr * 0.256;  // convert ps -> 1/256ns units
             break;
         case 'x':  // retained for legacy purposes, use '-X' instead
+            wmsg("'-x' has been deprecated and will be removed not before fpfind:v1.2024.15 - use '-X' instead");
         case 'X':
             islegacy = 1;
             break;
@@ -232,6 +249,9 @@ int main(int argc, char *argv[]) {
             break;
         case 'h':
             usage(); exit(1);
+            break;
+        case 'v':  // leave undocumented, for internal use only
+            isdebugverbose = 1;
             break;
         }
     }
@@ -331,7 +351,7 @@ int main(int argc, char *argv[]) {
         tv.tv_usec = RETRYREADWAIT;
         retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
         if (retval == -1) {
-            fprintf(stderr, "Error %d on select.\n", errno);
+            wmsg_i(50, "Error %d on select.", errno);
             break;  // graceful close
         }
 
@@ -342,13 +362,13 @@ int main(int argc, char *argv[]) {
             //       to inbytesread directly can potentially corrupt events.
             inbytesread_next = read(inhandle, inbufferbytes_next, INBUFSIZE - inbytespartial);
             if (inbytesread_next == 0) {
-                fprintf(stderr, "Input stream closed.\n");
+                wmsg("Input stream closed.");
                 break;  // no bytes read (i.e. EOF)
                         // TODO: Check if this should be continue instead,
                         //       when running ad-infinitum
             }
             if (inbytesread_next == -1) {
-                fprintf(stderr, "Error %d on input read.\n", errno);
+                wmsg_i(50, "Error %d on input read.", errno);
                 break;  // graceful close
             }
 
@@ -395,10 +415,12 @@ int main(int argc, char *argv[]) {
                 eventptr->high = ts >> 22;
                 eventptr->low = (ts << 10) | (low & 0x3ff);
 #ifdef __DEBUG__
-                fprintf(stderr, "[debug] Raw event - %08x %08x\n", high, low);
-                fprintf(stderr, "[debug] |   t_i: %014llx (%020llu)\n", tsmeas, tsmeas);
-                fprintf(stderr, "[debug] |  t'_i: %014llx (%020llu)\n", ts, ts);
-                fprintf(stderr, "[debug] +---------- %08x %08x\n", eventptr->high, eventptr->low);
+                if (isdebugverbose) {
+                    fprintf(stderr, "[debug] Raw event - %08x %08x\n", high, low);
+                    fprintf(stderr, "[debug] |   t_i: %014llx (%020llu)\n", tsmeas, tsmeas);
+                    fprintf(stderr, "[debug] |  t'_i: %014llx (%020llu)\n", ts, ts);
+                    fprintf(stderr, "[debug] +---------- %08x %08x\n", eventptr->high, eventptr->low);
+                }
 #endif
                 if (islegacy) {
                     _swp = eventptr->low;
@@ -425,14 +447,11 @@ int main(int argc, char *argv[]) {
             // File/pipe closed -> proceed without any further fcorr updates
             if (freqbytesread_next == 0) {
                 freqhandle = 0;
-#ifdef __DEBUG__
-                fprintf(stderr, "[debug] File/pipe '%s' closed.\n", freqfilename);
-                // hidden in buffer to avoid debug leak
+                wmsg_s(FNAMELENGTH+25, "File/pipe '%s' closed.", freqfilename);
                 // no break here
-#endif
             }
             if (freqbytesread_next == -1) {
-                fprintf(stderr, "Error %d on freqhandle read.\n", errno);
+                wmsg_i(32, "Error %d on freqhandle read.", errno);
                 break;
             }
 
@@ -477,12 +496,14 @@ int main(int argc, char *argv[]) {
         /* write out events */
         retval = write(outhandle, outbuffer, eventnum * sizeof(struct rawevent));
 #ifdef __DEBUG__
-        for (i = 0; i < eventnum; i++) {
-            fprintf(stderr, "[debug] Verify: %08x %08x\n", outbuffer[i].high, outbuffer[i].low);
+        if (isdebugverbose) {
+            for (i = 0; i < eventnum; i++) {
+                fprintf(stderr, "[debug] Verify: %08x %08x\n", outbuffer[i].high, outbuffer[i].low);
+            }
         }
 #endif
         if (retval != eventnum * sizeof(struct rawevent)) {
-            fprintf(stderr, "Error %d on write.\n", errno);
+            wmsg_i(30, "Error %d on write.", errno);
             break;  // graceful close
         }
         outevents = 0;  // clear outbuffer only after successful write
