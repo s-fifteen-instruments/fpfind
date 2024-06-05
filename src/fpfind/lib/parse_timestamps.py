@@ -899,8 +899,14 @@ def main():
         return t, p
 
     def inline_filter(stream, resolution: TSRES = TSRES.NS1):
+        commenced_reading = False
         for t, p in stream:
-            yield event_filter(t, p, resolution)
+            _t, _p = event_filter(t, p, resolution)
+            if commenced_reading and len(_t) == 0:
+                break
+            elif len(_t) != 0:
+                commenced_reading = True
+            yield _t, _p
 
     # Use legacy read-write mechanisms
     if args.inmemory:
