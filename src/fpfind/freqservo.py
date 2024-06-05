@@ -246,7 +246,7 @@ def main():
         else:
             cin = sys.stdin
         if args.F is not None:
-            cout = open(args.F, "a+")
+            cout = open(args.F, "w")
         else:
             cout = sys.stdout
 
@@ -289,6 +289,8 @@ def main():
             _df = round(_df)
             logger.debug("Wrote '%d' to output", _df)
             cout.write(f"{_df}\n")
+            cout.flush()  # necessary to avoid trapping df in buffer
+                          # alternatively, use 'open(pipe, "wb", 0)'
 
     except KeyboardInterrupt:
         logger.debug("User interrupted.")
