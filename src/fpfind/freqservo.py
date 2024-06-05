@@ -191,6 +191,9 @@ def main():
     pgroup.add_argument(
         "-V", metavar="level", type=int, choices=(4,5),
         help="Output format of costream (default: '<epoch:str> <dt:float_ns>\\n')")
+    pgroup.add_argument(
+        "-e", action="store_true",
+        help="Echo costream output back into stderr")
 
     # freqcd parameters
     pgroup = parser.add_argument_group("freqcd parameters")
@@ -266,6 +269,8 @@ def main():
 
             # Derive frequency shift from costream
             epoch, dt = parse(line, format=args.V)
+            if args.e:
+                print(line, end="", file=sys.stderr)
             df1 = evaluate_freqshift(
                 epoch, dt,
                 ignore=args.i, average=args.a, separation=args.s, cap=args.c,

@@ -420,6 +420,7 @@ int main(int argc, char *argv[]) {
                     fprintf(stderr, "[debug] |   t_i: %014llx (%020llu)\n", tsmeas, tsmeas);
                     fprintf(stderr, "[debug] |  t'_i: %014llx (%020llu)\n", ts, ts);
                     fprintf(stderr, "[debug] +---------- %08x %08x\n", eventptr->high, eventptr->low);
+                    fflush(stderr);
                 }
 #endif
                 if (islegacy) {
@@ -474,6 +475,7 @@ int main(int argc, char *argv[]) {
                         } else {
                             fprintf(stderr, "[debug] 'fcorr' updated to '%d' x 2^-34.\n", fcorr);
                         }
+                        fflush(stderr);
 #endif
                     }
                     next_num_idx = i+1;  // continue reading
