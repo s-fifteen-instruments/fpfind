@@ -437,8 +437,8 @@ def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
 
 def parse_docstring_description(docstring):
     placeholder = "~~~PLACEHOLDER~~~"
-    # Remove all changelog information
-    d = docstring.partition("Changelog:")[0]
+    # Remove all annotated sections, including changelog
+    d, *_ = re.split(r"\n[a-zA-Z0-9\s]+:\n", docstring)
 
     # Replace all newlines except the first
     d = re.sub(r"\n+", placeholder, d, count=1)

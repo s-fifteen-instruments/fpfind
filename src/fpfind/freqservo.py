@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
 """Reads costream output and provides frequency compensation updates.
 
-Ideally costream output is to be piped directly to the input of this script.
-If a copy of the output stream is desired, consider using tee.
+It reads the costream logging output (either written to '-n' argument, or to stdout otherwise),
+and performs a linear estimate of the timing drift (frequency offset). These frequency offsets are compatible
+with the formats read by 'freqcd'. See the documentation for 'freqservo:evaluate_freqshift' on how to
+tune this estimation. Example scenario:
+
+"freqcd -F freq.pipe -f freqdiff -o raws &
+chopper2 -i raws -D t1dir -U &
+costream -D t1dir -n log.pipe -V 5 &
+freqservo -n log.pipe -V 5 -F freq.pipe -f freqdiff &".
+
 """
 
 import logging
@@ -15,6 +23,7 @@ import numpy as np
 
 from fpfind.lib import parse_epochs as eparser
 from fpfind.lib.constants import EPOCH_DURATION
+from fpfind.lib.utils import parse_docstring_description, ArgparseCustomFormatter
 
 _LOGGING_FMT = "{asctime}\t{levelname:<7s}\t{funcName}:{lineno}\t| {message}"
 logger = logging.getLogger(__name__)
@@ -145,8 +154,10 @@ def evaluate_freqshift(epoch, dt, ignore=5, average=3, separation=12, cap=100e-9
 def main():
     script_name = Path(sys.argv[0]).name
     parser = configargparse.ArgumentParser(
+        add_config_file_help=False,
         default_config_files=[f"{script_name}.default.conf"],
-        description=__doc__.partition("\n")[0],
+        description=parse_docstring_description(__doc__),
+        formatter_class=ArgparseCustomFormatter,
         add_help=False,
     )
 
@@ -169,7 +180,7 @@ def main():
         help="Path to configuration file for saving, then immediately exit")
 
     # freqcalc parameters
-    pgroup = parser.add_argument_group("freqcalc parameters")
+    pgroup = parser.add_argument_group("freqservo parameters")
     pgroup.add_argument(
         "-i", metavar="ignore", type=int, default=5,
         help="Ignore initial epochs during calculation (default: %(default)d)")
