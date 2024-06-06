@@ -320,7 +320,7 @@ int main(int argc, char *argv[]) {
     ull tsref = 0;  // reference timestamp to scale by frequency correction,
                     // noting subsequent initializations should zero 'tsref'
     int isset_tsref = 0;    // initialization marker for tsref
-    ull ts, tsmeas;         // timestamp
+    ull ts, tsmeas, tsdiff; // timestamp
     ll tscorr;              // timestamp correction
     ll tsoverflowcorr = tcorr;  // timestamp overflow corrections
                                 // overloading with the desired timing corr
@@ -408,7 +408,8 @@ int main(int argc, char *argv[]) {
                 tsmeas = ((ull)high << 22) | (low >> 10);
 
                 /* calculate timestamp correction */
-                tscorr = ((ll)((tsmeas - tsref) >> FCORR_TBITS1) * fcorr) >> FCORR_TBITS2;
+                tsdiff = (tsmeas - tsref) & 0x3fffffffffffff;  // truncate to 54-bit LSB per timestamp spec
+                tscorr = ((ll)(tsdiff >> FCORR_TBITS1) * fcorr) >> FCORR_TBITS2;
                 ts = tsmeas + tscorr + tsoverflowcorr;
 
                 /* write corrected timestamp to output buffer */
