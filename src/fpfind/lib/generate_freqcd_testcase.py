@@ -114,8 +114,9 @@ def main():
 
         # Read binary timestamps from file
         try:
-            with open(inputfile, "wb") as f:
-                f.write(sys.stdin.buffer.read())
+            if HAS_TEMP_FILE:
+                with open(inputfile, "wb") as f:
+                    f.write(sys.stdin.buffer.read())
 
             # Parsing binary timestamps
             ts, _ = ts_parser.read_a1(inputfile, args.x)
