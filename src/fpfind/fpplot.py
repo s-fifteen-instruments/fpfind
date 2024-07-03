@@ -29,7 +29,7 @@ from fpfind.lib.parse_timestamps import read_a1_overlapping
 _ENABLE_BREAKPOINT = False
 logger = logging.getLogger(__name__)
 
-def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
+def plotter(alice, bob, freq, time, width, resolution, window=800, save=False, normalize=False, decimation=1):
     bob = (bob - time) / (1 + freq*1e-6)
     ys, xs, stats = histogram(
         alice, bob, duration=width, resolution=resolution,
@@ -39,6 +39,11 @@ def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
     if _ENABLE_BREAKPOINT:
         globals().update(locals())  # write all local variables to global scope
         raise
+
+    if decimation > 1:
+        ys = ys[::decimation]
+        xs = xs[::decimation]
+
 
     elapsed = (alice[-1] - alice[0]) * 1e-9
     _center = ys[500:1500]
@@ -60,11 +65,23 @@ def plotter(alice, bob, freq, time, width, resolution, window=800, save=False):
     print(f"  c:  {c:.0f}")
     print(f"Efficiency: {100*c/np.sqrt(s1*s2):.1f}%")
 
-    plt.plot(xs, ys, linewidth=1)
-    plt.xlabel("Delay (ns)")
-    plt.ylabel("g(2)")
+    # Normalize?
+    if normalize:
+        accs = s1 * s2 * elapsed * resolution * 1e-9
+        yerrs = np.sqrt(ys) / accs
+        ys = ys / accs
+        print(f"Normalizing by background = {accs}")
+        plt.errorbar(xs, ys, yerrs, fmt=".", markersize=3, elinewidth=1)
+
+    else:
+        plt.plot(xs, ys, linewidth=1)
+
+    plt.xlabel("Delay, $\\tau$ (ns)")
+    plt.ylabel("$g^{(2)}(\\tau)$")
     plt.tight_layout()
     if save:
+        plt.xlim(np.min(xs), np.max(xs))
+        plt.tight_layout()
         plt.savefig(save)
     plt.show()
     globals().update(locals())
@@ -157,6 +174,12 @@ def main():
     pgroup.add_argument(
         "--save-plot",
         help="Specify filename to save the plot to")
+    pgroup.add_argument(
+        "--normalize", action="store_true",
+        help="Normalize g(2) plot")
+    pgroup.add_argument(
+        "--decimation", type=int, default=1,
+        help="Take only every N-th point, for clarity (default: %(default)d)")
 
 
     # Parse arguments and configure logging
@@ -212,7 +235,7 @@ def main():
     alice = attenuate(alice, 1)
     bob = attenuate(bob, 1)
 
-    plotter(alice, bob, args.df, args.dt, 2*args.width, resolution=args.resolution, save=args.save_plot)
+    plotter(alice, bob, args.df, args.dt, 2*args.width, resolution=args.resolution, save=args.save_plot, normalize=args.normalize, decimation=args.decimation)
 
 
 if __name__ == "__main__":
