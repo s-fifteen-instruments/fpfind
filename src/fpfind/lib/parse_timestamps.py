@@ -143,6 +143,7 @@ def read_a1(
         mask: bool = False,
         invert: bool = False,
         buffer_size: int = 100_000,
+        relative_time: bool = False,
     ):
     """Wrapper to sread_a1 for efficiently reading subsets of whole file.
 
@@ -155,6 +156,9 @@ def read_a1(
 
     If 'buffer_size' of None is supplied, the old legacy '_read_a1' code
     will be used, and all timing/pattern filtering will be disabled.
+
+    If 'relative_time' is True, 'start' and 'end' values (in seconds) will
+    be shifted relative to the first timestamp.
     """
     if buffer_size is None:
         return _read_a1(filename, legacy, resolution, fractional)
@@ -162,7 +166,14 @@ def read_a1(
     streamer, _ = sread_a1(filename, legacy, resolution, fractional, buffer_size)
     ts = []; ps = []
     commenced_reading = False
+    has_applied_time_offset = False
     for t, p in streamer:
+        if relative_time and not has_applied_time_offset:
+            has_applied_time_offset = True
+            if start is not None:
+                start += (t[0]*1e-9)
+            if end is not None:
+                end += (t[0]*1e-9)
         i, j = get_timing_bounds(t, start, end, resolution)
         t = t[i:j]; p = p[i:j]
         if pattern is not None:
