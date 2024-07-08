@@ -11,7 +11,6 @@ References:
 
 from dataclasses import dataclass, field
 import datetime as dt
-import logging
 import pathlib
 from struct import pack, unpack
 from typing import NamedTuple
@@ -273,7 +272,7 @@ def extract_bits(msb_size: int, buffer: int, size: int, fileobject=None):
     msb = buffer >> (size - msb_size)
     buffer &= (1 << (size - msb_size)) - 1
     size -= msb_size
-    # logging.debug("Extracted %d bytes: %d", msb_size, msb)
+    # logger.debug("Extracted %d bytes: %d", msb_size, msb)
     return msb, buffer, size
 
 
@@ -416,7 +415,6 @@ def read_T2(
         while True:
 
             # Read timing information
-            logging.debug("Extracting timing...")
             timing, buffer, size = \
                 extract_bits(timeorder, buffer, size, f)
 
@@ -432,7 +430,6 @@ def read_T2(
 
             # Check if timing is actually in extended format, i.e. 32-bits
             if timing == 0:
-                logging.debug("Extracting extended timing...")
                 timing, buffer, size = \
                     extract_bits(timeorder_extended, buffer, size, f)
 
@@ -441,7 +438,6 @@ def read_T2(
 
             # Extract detector pattern, but not important here
             # Note we are guaranteed (timeorder+basebits < 32)
-            logging.debug("Extracting base...")
             base, buffer, size = extract_bits(basebits, buffer, size, f)
             bases.append(base)
 
@@ -635,7 +631,6 @@ def read_T4(filename: str):
         while True:
 
             # Read timing information
-            logging.debug("Extracting timing...")
             time_dindex, buffer, size = \
                 extract_bits(timeorder, buffer, size, f)
 
@@ -651,7 +646,6 @@ def read_T4(filename: str):
 
             # Check if timing is actually in extended format, i.e. 32-bits
             if time_dindex == 0:
-                logging.debug("Extracting extended timing...")
                 time_dindex, buffer, size = \
                     extract_bits(timeorder_extended, buffer, size, f)
 
@@ -661,7 +655,6 @@ def read_T4(filename: str):
 
             # Extract detector pattern, but not important here
             # Note we are guaranteed (timeorder+basebits < 32)
-            logging.debug("Extracting base...")
             base, buffer, size = extract_bits(basebits, buffer, size, f)
             bases.append(base)
 
