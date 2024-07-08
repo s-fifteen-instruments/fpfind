@@ -411,6 +411,36 @@ def get_first_overlapping_epoch(
     return min_epoch
 
 
+def iterate_epochs(epoch, length: int = None, step: int = 1):
+    """Stream incremental epoch names, starting from specified epoch.
+
+    Mainly as a convenience function. This is a generator, so it
+    should be fed into a consumer, e.g. `list(iterate_epochs(...))`.
+    If 'length' is None, this becomes an infinite stream of epochs.
+    The total number of epochs emitted does not change, if 'step' is specified.
+
+    Args:
+        epoch: Starting epoch, in hex.
+        length: Total number of epochs to emit.
+        step: Separation between consecutive epochs.
+
+    Example:
+        >>> for epoch in iterate_epochs("bbbbaaa0", length=3, step=2):
+        ...     print(epoch)
+        bbbbaaa0
+        bbbbaaa2
+        bbbbaaa4
+    """
+    epochint = epoch2int(epoch)
+    if length is not None:
+        for i in range(0, length*step, step):
+            yield int2epoch(epochint + i)
+    else:
+        while True:
+            yield int2epoch(epochint)
+            epochint += step
+
+
 def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
     epochdir = pathlib.Path(dirname)
     timestamp = np.array([], dtype=NP_PRECISEFLOAT)
