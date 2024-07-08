@@ -852,25 +852,31 @@ def get_timing_mask(
 
 def main():
     parser = argparse.ArgumentParser(description="Converts between different timestamp7 formats")
-    parser.add_argument("-A", choices=["0","1","2"], required=True, help="Input timestamp format")
-    parser.add_argument("-X", action="store_true", help="Use legacy input format")
-    parser.add_argument("-a", choices=["0","1","2"], default="1", help="Output timestamp format, defaults to 1")
-    parser.add_argument("-x", action="store_true", help="Use legacy output format")
+
     parser.add_argument("-p", "--print", action="store_true", help="Print statistics")
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress progress indicators")
-
-    # Filtering
-    parser.add_argument("--pfilter-pattern", type=int, help="Pattern filtering: pattern")
-    parser.add_argument("--pfilter-mask", action="store_true", help="Pattern filtering: set mask option")
-    parser.add_argument("--pfilter-invert", action="store_true", help="Pattern filtering: set invert option")
-    parser.add_argument("--tfilter-start", type=float, help="Time filtering: start timestamp, in seconds")
-    parser.add_argument("--tfilter-end", type=float, help="Time filtering: end timestamp, in seconds")
-
     # Support for older read-write mechanisms, i.e. disable batch streaming
     parser.add_argument("--inmemory", action="store_true", help="Disable batch streaming (retained for legacy reasons)")
 
+    pgroup = parser.add_argument_group("Timestamp formats")
+    pgroup.add_argument("-A", choices=["0","1","2"], default="1", help="Input timestamp format (default: 1)")
+    pgroup.add_argument("-X", action="store_true", help="Use legacy input format (default: False)")
+    pgroup.add_argument("-a", choices=["0","1","2"], default="1", help="Output timestamp format (default: 1)")
+    pgroup.add_argument("-x", action="store_true", help="Use legacy output format (default: False)")
+
+    # Filtering
+    pgroup = parser.add_argument_group("Pattern filtering")
+    pgroup.add_argument("--pfilter-pattern", type=int, metavar="", help="Specify pattern for filtering (e.g. 5 for ch1+ch3)")
+    pgroup.add_argument("--pfilter-mask", action="store_true", help="Use pattern as mask instead of fixed (default: False)")
+    pgroup.add_argument("--pfilter-invert", action="store_true", help="Exclude pattern instead of include (default: False)")
+
+    pgroup = parser.add_argument_group("Timestamp filtering")
+    pgroup.add_argument("--tfilter-start", type=float, metavar="", help="Specify start timestamp, in seconds")
+    pgroup.add_argument("--tfilter-end", type=float, metavar="", help="Specify end timestamp, in seconds")
+
+
     parser.add_argument("infile", help="Input timestamp file")
-    parser.add_argument("outfile", nargs="?", const="", help="Output timestamp file")
+    parser.add_argument("outfile", nargs="?", const="", help="Output timestamp file (optional: not required for printing)")
 
     # Print help if no arguments supplied
     if len(sys.argv) == 1:
