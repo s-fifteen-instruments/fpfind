@@ -46,6 +46,7 @@
 # Changelog:
 #   2022-10-07 Currently does not deal with dummy events and blinding events, all set to 0
 #   2023-05-09 Add streaming capabilities, minimize inline processing using raw resolution
+#   2024-07-09 Remove references to deprecated typing.Tuple types, causing issues
 
 import argparse
 import bisect
@@ -54,8 +55,7 @@ import pathlib
 import warnings
 import struct
 import sys
-from typing import Tuple, Optional
-from collections.abc import Iterator
+from typing import Optional
 
 import numpy as np
 import tqdm
@@ -197,7 +197,7 @@ def sread_a1(
         resolution: TSRES = TSRES.NS1,
         fractional: bool = True,
         buffer_size: int = 100_000,
-    ) -> Tuple[Iterator[list,list], int]:
+    ):
     """Block streaming variant of 'read_a1'.
 
     For large timestamp datasets where either not all timestamps need
@@ -250,7 +250,7 @@ def sread_a0(
         resolution: TSRES = TSRES.NS1,
         fractional: bool = True,
         buffer_size: int = 100_000,
-    ) -> Tuple[Iterator[list,list], int]:
+    ):
     """See documentation for 'sread_a1'"""
     def _sread_a0():
         with open(filename, "r") as f:
@@ -276,7 +276,7 @@ def sread_a2(
         resolution: TSRES = TSRES.NS1,
         fractional: bool = True,
         buffer_size: int = 100_000,
-    ) -> Tuple[Iterator[list,list], int]:
+    ):
     """See documentation for 'sread_a1'"""
     def _sread_a2():
         with open(filename, "r") as f:
@@ -458,7 +458,7 @@ def write_a1(filename: str, t: list, p: list, legacy: bool = False, resolution: 
 
 def swrite_a1(
         filename: str,
-        stream: Iterator[Tuple],
+        stream,
         num_batches: Optional[int] = None,
         legacy: bool = False,
         resolution: TSRES = TSRES.NS1,
@@ -493,7 +493,7 @@ def swrite_a1(
 
 def swrite_a0(
         filename: str,
-        stream: Iterator[Tuple],
+        stream,
         num_batches: Optional[int] = None,
         legacy: Optional[bool] = None,
         resolution: TSRES = TSRES.NS1,
@@ -512,7 +512,7 @@ def swrite_a0(
 
 def swrite_a2(
         filename: str,
-        stream: Iterator[Tuple],
+        stream,
         num_batches: Optional[int] = None,
         legacy: Optional[bool] = None,
         resolution: TSRES = TSRES.NS1,
@@ -558,7 +558,7 @@ def print_statistics(filename: str, t: list, p: list):
 
 def print_statistics_stream(
         filename: str,
-        stream: Iterator[Tuple],
+        stream,
         num_batches: Optional[int] = None,
         resolution: TSRES = TSRES.NS1,
         display: bool = True,
@@ -656,7 +656,7 @@ def get_pattern_mask(
         pattern: int,
         mask: bool = False,
         invert: bool = False,
-    ) -> Tuple[list, list]:
+    ):
     """Returns a mask with bits set where patterns match, as well as result.
 
     The function behaves differently when the pattern is either used as
