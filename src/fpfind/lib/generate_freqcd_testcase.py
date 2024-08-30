@@ -71,6 +71,7 @@ def owrite(event):
     sys.stdout.flush()
 
 def main():
+    global LEGACY
     parser = argparse.ArgumentParser(description="Generates binary timestamp events for testing freqcd.")
     parser.add_argument("-o", help="output file, defaults to stdout stream")
     parser.add_argument("-t", type=int, nargs="+", help="list of timestamps in decimal")
