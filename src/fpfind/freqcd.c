@@ -88,6 +88,7 @@
 #include <errno.h>   // select errno
 #include <limits.h>  // INT_MAX
 #include <math.h>    // pow(..., 10), round(...)
+#include <string.h>  // strcmp(...)
 
 /* default definitions */
 #define FNAMELENGTH 200            /* length of file name buffers */
@@ -141,6 +142,7 @@ char *errormessage[] = {
     "Freq correction value not newline terminated",
     "Unable to allocate memory to freqbuffer",
     "Error parsing time correction as integer",
+    "Duplicate filename specified for reading and writing", /* 15 */
 };
 void wmsg(char *message) {
     fprintf(stderr, COLOR_ERROR "%s\n" COLOR_RESET, message);
@@ -276,16 +278,18 @@ int main(int argc, char *argv[]) {
         if (inhandle == -1) return -emsg(3);
     }
 
-    int outhandle = 1;  // stdout by default
-    if (outfilename[0]) {
-        outhandle = open(outfilename, O_WRONLY | O_CREAT | O_TRUNC, FILE_PERMISSONS);
-        if (outhandle == -1) return -emsg(9);
-    }
-
     int freqhandle = 0;  // null by default (not stdin)
     if (freqfilename[0]) {
         freqhandle = open(freqfilename, O_RDONLY | O_NONBLOCK);
         if (freqhandle == -1) return -emsg(11);
+    }
+
+    int outhandle = 1;  // stdout by default
+    if (outfilename[0]) {
+        if ((infilename[0]) && (strcmp(outfilename, infilename) == 0)) return -emsg(15);
+        if ((freqfilename[0]) && (strcmp(outfilename, freqfilename) == 0)) return -emsg(15);
+        outhandle = open(outfilename, O_WRONLY | O_CREAT | O_TRUNC, FILE_PERMISSONS);
+        if (outhandle == -1) return -emsg(9);
     }
 
     /* initialize input and output buffers */
