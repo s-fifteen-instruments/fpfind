@@ -2,7 +2,7 @@
               timestamps emitted by a timestamp unit running at a relative
               frequency offset. Proof-of-concept.
 
-   Copyright (C) 2023 Justin Peh, Xu Zifang, Christian Kurtsiefer,
+   Copyright (C) 2024 Justin Peh, Xu Zifang, Christian Kurtsiefer,
                       National University of Singapore
 
    This source code is free software; you can redistribute it and/or
@@ -93,8 +93,8 @@
 #define FNAMELENGTH 200            /* length of file name buffers */
 #define FNAMEFORMAT "%200s"        /* for sscanf of filenames */
 #define FILE_PERMISSONS 0644       /* for all output files */
-#define INBUFENTRIES 1024          /* max. elements in input buffer */
-#define OUTBUFENTRIES 1024         /* max. elements in output buffer */
+#define INBUFENTRIES 1024000       /* max. elements in input buffer */
+#define OUTBUFENTRIES 1024000      /* max. elements in output buffer */
 #define FREQBUFSIZE 100            /* max. length of frequency correction values */
 #define RETRYREADWAIT 500000       /* sleep time in usec after an empty read */
 #define FCORR_ARESBITS -34         /* absolute resolution of correction, in power of 2 */
