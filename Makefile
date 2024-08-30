@@ -14,7 +14,7 @@ endif
 .PHONY: clean,read,readx
 
 all:
-	gcc -o ${DIR}/freqcd ${DIR}/freqcd.c ${LIB}/getopt.c
+	gcc -o ${DIR}/freqcd ${DIR}/freqcd.c ${LIB}/getopt.c -lm
 shell:
 	-poetry shell
 fpfind-shell:
