@@ -101,6 +101,7 @@
 #define FCORR_AMAXBITS -13         /* absolute maximum allowed correction, in power of 2 */
 #define FCORR_DEFAULT 0            /* frequency correction in units of 2^FCORR_ARESBITS */
 #define FCORR_ARESDECIMAL -10      /* absolute resolution of correction, in power of 10, specifically for '-d' mode */
+#define FCORR_OFLOWRESBITS 64      /* overflow correction resolution, in power of 2 */
 //#define __DEBUG__                /* global debug flag, uncomment to disable, send -v flag for more debug msgs */
 
 // Formatting colors
@@ -115,6 +116,13 @@ typedef struct rawevent {
 
 typedef long long ll;
 typedef unsigned long long ull;
+#ifdef __SIZEOF_INT128__
+typedef unsigned __int128 u128;
+typedef __int128 i128;
+#else
+#warning "128-bit integers unsupported in current compiler: \
+slight undercompensation of frequency will occur from rounding errors."
+#endif
 
 /* error handling */
 char *errormessage[] = {
@@ -324,6 +332,11 @@ int main(int argc, char *argv[]) {
     ll tscorr;              // timestamp correction
     ll tsoverflowcorr = tcorr;  // timestamp overflow corrections
                                 // overloading with the desired timing corr
+#ifdef __SIZEOF_INT128__
+    u128 _tsdiff;           // 128-bit equivalents to mitigate rounding error
+    i128 _tscorr;
+    i128 _tsoverflowcorr = (i128)tcorr << FCORR_OFLOWRESBITS;
+#endif
     unsigned int high;      // high word in timestamp
     unsigned int low;       // low word in timestamp
     unsigned int _swp;      // temporary swap variable, support 'legacy' option
@@ -433,9 +446,18 @@ int main(int argc, char *argv[]) {
                 eventptr++;
             }
 
+            /* accumulate timestamp corrections across batches */
+#ifdef __SIZEOF_INT128__
+            _tsdiff = ((u128)tsdiff) << FCORR_OFLOWRESBITS;
+            _tscorr = ((i128)(_tsdiff >> FCORR_TBITS1) * fcorr) >> FCORR_TBITS2;
+            _tsoverflowcorr += _tscorr;  // accumulates using higher resolution units
+            tsoverflowcorr = (ll)(_tsoverflowcorr >> FCORR_OFLOWRESBITS);
+#else
+            tsoverflowcorr += tscorr;
+#endif
+
             /* update reference timestamp to keep within 20 hour overflow condition */
             tsref = tsmeas;
-            tsoverflowcorr += tscorr;
         }
 
         // Read frequency correction values
