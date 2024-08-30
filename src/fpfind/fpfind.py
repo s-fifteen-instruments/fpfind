@@ -34,7 +34,7 @@ from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
 from fpfind.lib.constants import (
     EPOCH_LENGTH, MAX_FCORR, NTP_MAXDELAY_NS, PeakFindingFailed,
 )
-from fpfind.lib.logging import get_logger, verbosity2level, set_logfile
+from fpfind.lib._logging import get_logger, verbosity2level, set_logfile
 from fpfind.lib.utils import (
     ArgparseCustomFormatter, parse_docstring_description,
     round, generate_fft, get_timing_delay_fft, slice_timestamps, get_xcorr, get_statistics,

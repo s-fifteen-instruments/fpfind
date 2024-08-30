@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fpfind"
-version = "1.2024.11"
+version = "1.2024.12"
 description = "Add-on implementation of frequency compensation for qcrypto."
 authors = ["Xu Zifang <francium0415@gmail.com>", "Justin Peh <pehyuxiang@gmail.com>"]
 maintainers = ["S-Fifteen Instruments <info@s-fifteen.com>"]

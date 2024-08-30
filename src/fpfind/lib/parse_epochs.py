@@ -18,7 +18,7 @@ from typing import NamedTuple
 import numpy as np
 
 from fpfind import TSRES, NP_PRECISEFLOAT
-from fpfind.lib.logging import get_logger
+from fpfind.lib._logging import get_logger
 
 logger = get_logger(__name__, level="warning")
 
