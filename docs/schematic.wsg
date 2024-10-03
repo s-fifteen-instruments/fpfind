@@ -1,0 +1,56 @@
+'' PlantUML '''
+@startuml qcrypto_fpfind
+scale 360 width
+skinparam artifactBackgroundColor Beige
+skinparam linetype ortho
+!define qcrypto beige
+!define impl gold
+
+'' Alice side ''
+rectangle "QKD node\n(high-count side)" {
+    rectangle readevents.c as readevents1  #qcrypto
+    rectangle chopper2.c   as chopper2     #qcrypto
+    rectangle costream.c   as costream     #qcrypto
+    rectangle fpfind.py    as fpfind       #impl
+    rectangle freqservo.py as freqservo    #impl
+    rectangle freqcd.c     as freqcd       #impl
+    database RAWKEYS       as match1
+}
+readevents1 -[#gainsboro]d-> chopper2
+chopper2 -d-> costream
+costream -d-> match1
+
+'' Implementation
+readevents1 -d-> freqcd
+freqcd -r-> chopper2
+chopper2 -d-> fpfind
+fpfind .d.> costream
+costream .l.> freqservo
+freqservo .u.> freqcd
+
+
+
+'' Bob side ''
+rectangle "QKD node\n(low-count side)" {
+    rectangle readevents.c as readevents2  #qcrypto
+    rectangle chopper.c    as chopper      #qcrypto
+    rectangle splicer.c    as splicer      #qcrypto
+    database RAWKEYS       as match2
+}
+readevents2 --d-> chopper
+chopper -d-> splicer
+splicer -d-> match2
+
+
+
+'' Connection (mediated by transferd) ''
+costream -> splicer
+fpfind <- chopper
+
+
+
+'' Aesthetics ''
+readevents1 -[hidden]r-> readevents2
+match1 -[hidden]r-> match2
+
+@enduml

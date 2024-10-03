@@ -1,10 +1,7 @@
 # Ignore data directory and symlinks
-code/data
 data
-data_win
 src/fpfind/freqcd_path
-temp
-tmp
+docs/plantuml*
 
 # Compiled python files
 **/__pycache__
@@ -12,9 +9,6 @@ tmp
 
 # poetry-related files
 poetry.lock
-
-# Sample tests
-tests/sample/example_hello
 
 # IDE
 .vscode

@@ -29,7 +29,9 @@ clean:
 	find . -type d -name ".pytest_cache" | xargs rm -rf
 	find . -type d -name "__pycache__" | xargs rm -rf
 	rm -f ${DIR}/freqcd
-
+compile-schematic:
+	java -jar docs/plantuml* docs/schematic.wsg
+	
 # Python package management
 install: install-poetry
 	poetry install
