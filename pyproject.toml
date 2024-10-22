@@ -22,7 +22,9 @@ freqservo = "fpfind.freqservo:main"
 fpfind = "fpfind.fpfind:main"
 fpplot = "fpfind.fpplot:main"
 parse_timestamps = "fpfind.lib.parse_timestamps:main"
+parse-timestamps = "fpfind.lib.parse_timestamps:main"
 generate_freqcd_testcase = "fpfind.lib.generate_freqcd_testcase:main"
+generate-freqcd-testcase = "fpfind.lib.generate_freqcd_testcase:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.1"
