@@ -853,7 +853,6 @@ def get_timing_mask(
 def main():
     parser = argparse.ArgumentParser(description="Converts between different timestamp7 formats")
 
-    parser.add_argument("-p", "--print", action="store_true", help="Print statistics")
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress progress indicators")
     # Support for older read-write mechanisms, i.e. disable batch streaming
     parser.add_argument("--inmemory", action="store_true", help="Disable batch streaming (retained for legacy reasons)")
@@ -883,10 +882,7 @@ def main():
         sys.exit(1)
 
     args = parser.parse_args()
-
-    # Check outfile supplied if '-p' not supplied
-    if not args.print and not args.outfile:
-        raise ValueError("destination filepath must be supplied.")
+    print_only = args.outfile is None
 
     read = [read_a0, read_a1, read_a2][int(args.A)]
     sread = [sread_a0, sread_a1, sread_a2][int(args.A)]
@@ -928,13 +924,13 @@ def main():
     if args.inmemory:
         t, p = read(filepath, args.X)
         t, p = event_filter(t, p)
-        if args.print:
+        if print_only:
             print_statistics(filepath, t, p)
         else:
             write(args.outfile, t, p, args.x)
 
     # Check if printing stream first
-    elif args.print:
+    elif print_only:
         if has_filtering:
             stream, num_batches = sread(filepath, args.X)  # default 1ns floating-point resolution
             stream = inline_filter(stream)
