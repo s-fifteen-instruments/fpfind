@@ -220,7 +220,7 @@ def main():
         _is_reading_ts = True
         (alice, bob), _ = read_a1_overlapping(
             args.reference, args.target, legacy=args.legacy,
-            duration=args.duration,
+            duration=args.duration + args.skip_duration,
         )
 
     else:
