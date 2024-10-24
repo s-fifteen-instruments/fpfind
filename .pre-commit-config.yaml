@@ -4,4 +4,4 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: [--scopes, "fpplot,freqcd,freqservo,parser", feat, fix, perf, refactor, style, test, docs]
+        args: [--scopes, "fpfind,fpplot,freqcd,freqservo,parser", feat, fix, perf, refactor, style, test, docs]
