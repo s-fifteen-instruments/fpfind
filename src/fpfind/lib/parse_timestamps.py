@@ -23,10 +23,10 @@
 #
 #   Equivalent command-line usage (faster since using smaller stream buffers):
 #
-#     > ./parse_timestamps.py -A1 -X -a1 --pfilter-pattern 1 --pfilter-mask \
+#     > ./parse_timestamps.py -A1 -X -a1 --pattern 1 --mask \
 #          timestampfile.Aa1X.dat alice.Aa1.dat
 #
-#     > ./parse_timestamps.py -A1 -X -a1 -x --pfilter-pattern 8 --tfilter-start 100 --tfilter-end 120 \
+#     > ./parse_timestamps.py -A1 -X -a1 -x --pattern 8 --start 100 --end 120 \
 #          timestampfile.Aa1X.dat bob.Aa2X.txt
 #
 #
@@ -40,7 +40,7 @@
 #
 #   Print event statistics:
 #
-#     > ./parse_timestamps.py -A1 -X --print timestampfile.Aa1X.dat
+#     > ./parse_timestamps.py -X timestampfile.Aa1X.dat
 #
 #
 # Changelog:
@@ -866,14 +866,13 @@ def main():
 
     # Filtering
     pgroup = parser.add_argument_group("Pattern filtering")
-    pgroup.add_argument("--pfilter-pattern", type=int, metavar="", help="Specify pattern for filtering (e.g. 5 for ch1+ch3)")
-    pgroup.add_argument("--pfilter-mask", action="store_true", help="Use pattern as mask instead of fixed (default: False)")
-    pgroup.add_argument("--pfilter-invert", action="store_true", help="Exclude pattern instead of include (default: False)")
+    pgroup.add_argument("--pattern", type=int, metavar="", help="Specify pattern for filtering (e.g. 5 for ch1+ch3)")
+    pgroup.add_argument("--mask", action="store_true", help="Use pattern as mask instead of fixed (default: False)")
+    pgroup.add_argument("--invert", action="store_true", help="Exclude pattern instead of include (default: False)")
 
     pgroup = parser.add_argument_group("Timestamp filtering")
-    pgroup.add_argument("--tfilter-start", type=float, metavar="", help="Specify start timestamp, in seconds")
-    pgroup.add_argument("--tfilter-end", type=float, metavar="", help="Specify end timestamp, in seconds")
-
+    pgroup.add_argument("--start", type=float, metavar="", help="Specify start timestamp, in seconds")
+    pgroup.add_argument("--end", type=float, metavar="", help="Specify end timestamp, in seconds")
 
     parser.add_argument("infile", help="Input timestamp file")
     parser.add_argument("outfile", nargs="?", const="", help="Output timestamp file (optional: not required for printing)")
@@ -901,16 +900,16 @@ def main():
 
     # Define filter function for event and event stream
     has_filtering = \
-        (args.pfilter_pattern is not None) \
-        or (args.tfilter_start is not None) \
-        or (args.tfilter_end is not None)
+        (args.pattern is not None) \
+        or (args.start is not None) \
+        or (args.end is not None)
 
     def event_filter(t, p, resolution: TSRES = TSRES.NS1):
-        if args.pfilter_pattern is not None:
-            mask, p = get_pattern_mask(p, args.pfilter_pattern, args.pfilter_mask, args.pfilter_invert)
+        if args.pattern is not None:
+            mask, p = get_pattern_mask(p, args.pattern, args.mask, args.invert)
             t = t[mask]
-        if args.tfilter_start is not None or args.tfilter_end is not None:
-            mask = get_timing_mask(t, args.tfilter_start, args.tfilter_end, resolution)
+        if args.start is not None or args.end is not None:
+            mask = get_timing_mask(t, args.start, args.end, resolution)
             t = t[mask]
             p = p[mask]
         return t, p
