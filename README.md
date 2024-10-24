@@ -56,3 +56,24 @@ In particular:
 Certain issues may appear when attempting an install on RaspbianOS:
 
 * Importing `numpy` yields the error message stating `libopenblas.so` could not be found (this is the underlying linear algebra library for Numpy); installing the `libopenblas-dev` library fixes this, e.g. `apt install libopenblas-dev`
+
+## Contributing
+
+Version tags (as of **v2**) follow [semantic versioning](https://semver.org/spec/v2.0.0.html), with a build string indicating the date of release in "YYMMDD" format, e.g. **v2.0.0+2410224**. This allows clear indication to the user whether the local version is severely outdated, while maintaining the clarity of semantic versioning. Versioning is performed by:
+
+1. Modifying the **version** field in `pyproject.toml`, with no "v"
+1. Adding a basic git tag associated with the commit, with "v" prepended
+
+Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **perf**, **refactor**, **style**, **test**, **docs**.
+If a scope is provided, it should be one of:
+
+* **fpplot**
+* **freqcd**
+* **freqservo**
+* **parser** (for both timestamp and epoch)
+
+Commit messages can be automatically checked using `pre-commit`, after installing:
+
+```bash
+pre-commit install --hook-type commit-msg
+```

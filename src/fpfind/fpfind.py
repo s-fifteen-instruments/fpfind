@@ -123,6 +123,7 @@ def time_freq(
         threshold: float,
         separation_duration: float,
         quick: bool,
+        do_frequency_compensation: bool = True,
     ):
     """Perform the actual frequency compensation routine.
 
@@ -154,7 +155,6 @@ def time_freq(
     dt = 0
     f = 1
     curr_iteration = 1
-    do_frequency_compensation = True
 
     while True:
         # Dynamically adjust 'num_wraps' based on current 'resolution',
@@ -396,6 +396,7 @@ def fpfind(
         precompensations: list,
         precompensation_fullscan: bool = False,
         quick: bool = False,
+        do_frequency_compensation: bool = True,
     ):
     """Performs fpfind procedure.
 
@@ -434,7 +435,7 @@ def fpfind(
                 alice, (bob - dt)/f,
                 num_wraps, num_bins, resolution, target_resolution,
                 threshold, separation_duration,
-                quick=quick,
+                quick=quick, do_frequency_compensation=do_frequency_compensation,
             )
         except ValueError as e:
             logger.info(f"Peak finding failed, {df0*1e6:7.3f} ppm: {str(e)}")
@@ -573,6 +574,9 @@ def main():
 
         # fpfind parameters
         pgroup_fpfind = parser.add_argument_group("fpfind parameters")
+        pgroup_fpfind.add_argument(
+            "--disable-comp", action="store_true",
+            help=advv("Disables frequency compensation entirely"))
         pgroup_fpfind.add_argument(
             "-k", "--num-wraps", metavar="", type=int, default=1,
             help=adv("Specify number of arrays to wrap (default: %(default)d)"))
@@ -813,6 +817,7 @@ def main():
         precompensations=precompensations,
         precompensation_fullscan=args.precomp_fullscan,
         quick=args.quick,
+        do_frequency_compensation=not args.disable_comp,
     )
 
     # To understand the options below, we first clarify some definitions:

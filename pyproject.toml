@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "fpfind"
-version = "1.2024.13"
+version = "2.0.0+241024"
 description = "Add-on implementation of frequency compensation for qcrypto."
 authors = ["Xu Zifang <francium0415@gmail.com>", "Justin Peh <pehyuxiang@gmail.com>"]
 maintainers = ["S-Fifteen Instruments <info@s-fifteen.com>"]
@@ -8,7 +8,7 @@ license = "GPLv2"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.8,<3.13"
+python = ">=3.8"
 numpy = ">=1.24.1"
 matplotlib = "^3.6.3"
 scipy = "^1.10.0"
