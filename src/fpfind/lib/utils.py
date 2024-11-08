@@ -1,21 +1,20 @@
 import argparse
-import logging
 import pathlib
 import re
 import typing
 import warnings
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import scipy
 
 from fpfind import NP_PRECISEFLOAT
-from fpfind.lib.parse_epochs import (
-    epoch2int, int2epoch, read_T1, read_T2,
-)
+from fpfind.lib.parse_epochs import epoch2int, int2epoch, read_T1, read_T2
 
 inbuilt_round = round
+
+
 def round(number, ndigits=None, sf=None, dp=None):
     """Stand-in replacement for in-built round, adapted from [1].
 
@@ -40,14 +39,14 @@ def round(number, ndigits=None, sf=None, dp=None):
 
     # Perform rounding
     x = np.asarray(number)
-    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10**(sf-1))
+    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10 ** (sf - 1))
     mags = 10 ** (sf - 1 - np.floor(np.log10(x_positive)))
     return inbuilt_round(np.round(x * mags) / mags)
 
-    intermediate = float('{:.{p}g}'.format(number, p=sf))
+    intermediate = float("{:.{p}g}".format(number, p=sf))
     if isinstance(number, int):
         return int(intermediate)  # preserve as int even when very large
-    return '{:.{p}g}'.format(intermediate, p=sf)
+    return "{:.{p}g}".format(intermediate, p=sf)
 
 
 def get_overlap(*arrays):
@@ -59,6 +58,7 @@ def get_overlap(*arrays):
     overlap = min(map(len, arrays))
     arrays = [a[:overlap] for a in arrays]
     return overlap, arrays
+
 
 @dataclass
 class PeakStatistics:
@@ -123,6 +123,7 @@ class PeakStatistics:
         if self.mean == 0:
             return None
         return self.max / self.mean
+
 
 def get_statistics(
     hist: list,
@@ -195,9 +196,7 @@ def generate_fft(
     """
     if len(arr) == 0:
         raise ValueError("Array is empty!")
-    bin_arr = np.bincount(
-        np.int32((arr // time_res) % num_bins), minlength=num_bins
-    )
+    bin_arr = np.bincount(np.int32((arr // time_res) % num_bins), minlength=num_bins)
     return scipy.fft.rfft(bin_arr)
 
 
@@ -219,9 +218,8 @@ def convert_histogram_fft(hist: list, time_bins: list):
     """Adjust axes to estimate position."""
     hlen = len(hist) // 2
     hist = np.hstack((hist[hlen:], hist[:hlen]))
-    time_bins = np.hstack((-np.flip(time_bins[1:hlen+1]), time_bins[:hlen]))
+    time_bins = np.hstack((-np.flip(time_bins[1 : hlen + 1]), time_bins[:hlen]))
     return hist, time_bins
-
 
 
 def get_timing_delay_fft(hist: list, time_bins: list, include_negative: bool = False):
@@ -247,6 +245,7 @@ def get_timing_delay_fft(hist: list, time_bins: list, include_negative: bool = F
     result = (ptime, ntime) if np.abs(ppos) < np.abs(npos) else (ntime, ptime)
     return result
 
+
 def get_delay_at_index_fft(time_bins: list, pos: int):
     assert pos >= 0
     pos2 = len(time_bins) - pos if pos != 0 else 0  # corner case
@@ -254,6 +253,7 @@ def get_delay_at_index_fft(time_bins: list, pos: int):
     ntime = -time_bins[pos2]
     result = (ptime, ntime) if np.abs(pos) < np.abs(pos2) else (ntime, ptime)
     return result
+
 
 def get_top_k_delays_fft(hist: list, time_bins: list, k: int):
     assert k >= 1
@@ -263,7 +263,10 @@ def get_top_k_delays_fft(hist: list, time_bins: list, k: int):
     xs_raw = np.argpartition(hist, -k)[-k:]
     ys_raw = hist[xs_raw]
     sort = ys_raw.argsort()[::-1]  # descending order
-    result = [(y, *get_delay_at_index_fft(time_bins, x)) for x, y in zip(xs_raw[sort], ys_raw[sort])]
+    result = [
+        (y, *get_delay_at_index_fft(time_bins, x))
+        for x, y in zip(xs_raw[sort], ys_raw[sort])
+    ]
     return result
 
 
@@ -284,12 +287,13 @@ def slice_timestamps(
         if duration >= ts[-1]:
             warnings.warn(
                 f"Desired duration ({duration*1e-9:.3f} s) is longer "
-                f"than available data ({ts[-1]*1e-9:.3f} s)")
+                f"than available data ({ts[-1]*1e-9:.3f} s)"
+            )
         ts = ts[ts < duration]
     return ts
 
 
-def histogram_fft(
+def histogram_fft(  # noqa: PLR0913
     alice: list,
     bob: list,
     num_bins: int,
@@ -335,20 +339,25 @@ def histogram_fft(
     result = get_xcorr(afft, bfft, filter)
     bins = np.arange(num_bins) * resolution
     if statistics:
-        return result, bins, alen, blen, get_statistics(result, resolution, center, window)
+        return (
+            result,
+            bins,
+            alen,
+            blen,
+            get_statistics(result, resolution, center, window),
+        )
     return result, bins
 
 
 # https://stackoverflow.com/a/23941599
 class ArgparseCustomFormatter(argparse.RawDescriptionHelpFormatter):
-
     RAW_INDICATOR = "rawtext|"
 
     def _format_action_invocation(self, action):
         if not action.option_strings:
             _ = self._metavar_formatter(action, action.dest)(1)
             print(action, _)
-            metavar, = _
+            (metavar,) = _
             return metavar
         else:
             parts = []
@@ -365,21 +374,24 @@ class ArgparseCustomFormatter(argparse.RawDescriptionHelpFormatter):
                 default = action.dest.upper()
                 args_string = self._format_args(action, default)
                 for option_string in action.option_strings:
-                    #parts.append('%s %s' % (option_string, args_string))
-                    parts.append('%s' % option_string)
-                parts[-1] += ' %s'%args_string
-            return ', '.join(parts)
+                    # parts.append('%s %s' % (option_string, args_string))
+                    parts.append("%s" % option_string)
+                parts[-1] += " %s" % args_string
+            return ", ".join(parts)
 
     def _split_lines(self, text, width):
         marker = ArgparseCustomFormatter.RAW_INDICATOR
         if text.startswith(marker):
-            return text[len(marker):].splitlines()
+            return text[len(marker) :].splitlines()
         return super()._split_lines(text, width)
 
 
 def get_first_overlapping_epoch(
-        dir1, dir2, first_epoch=None, return_length=False,
-    ):
+    dir1,
+    dir2,
+    first_epoch=None,
+    return_length=False,
+):
     """Get epoch name of smallest overlapping epoch.
 
     If 'return_length' is True, the return value is a tuple of the epoch name
@@ -433,7 +445,7 @@ def iterate_epochs(epoch, length: int = None, step: int = 1):
     """
     epochint = epoch2int(epoch)
     if length is not None:
-        for i in range(0, length*step, step):
+        for i in range(0, length * step, step):
             yield int2epoch(epochint + i)
     else:
         while True:
@@ -450,6 +462,7 @@ def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
         timestamp = np.append(timestamp, reader(epoch_name)[0])
     return timestamp
 
+
 def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
     """Shifts timestamp arrays to reference zero.
 
@@ -461,9 +474,10 @@ def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
     if not preserve_relative:
         T = [slice_timestamps(ts) for ts in T]
 
-    start_time = max([ts[0] for ts in T]) + skip*1e9  # units of ns
+    start_time = max([ts[0] for ts in T]) + skip * 1e9  # units of ns
     T = [slice_timestamps(ts, start_time) for ts in T]
     return T
+
 
 def parse_docstring_description(docstring):
     placeholder = "~~~PLACEHOLDER~~~"
