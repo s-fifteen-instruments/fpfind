@@ -64,9 +64,10 @@ Version tags (as of **v2**) follow [semantic versioning](https://semver.org/spec
 1. Modifying the **version** field in `pyproject.toml`, with no "v"
 1. Adding a basic git tag associated with the commit, with "v" prepended
 
-Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **perf**, **refactor**, **style**, **test**, **docs**.
+Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **perf**, **refactor**, **style**, **test**, **docs**, **build**.
 If a scope is provided, it should be one of:
 
+* **fpfind**
 * **fpplot**
 * **freqcd**
 * **freqservo**

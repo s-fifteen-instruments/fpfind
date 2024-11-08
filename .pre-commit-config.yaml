@@ -4,7 +4,7 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
-        args: [--scopes, "fpfind,fpplot,freqcd,freqservo,parser", feat, fix, perf, refactor, style, test, docs]
+        args: [--scopes, "fpfind,fpplot,freqcd,freqservo,parser", feat, fix, perf, refactor, style, test, docs, build]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.7.1
     hooks:
