@@ -1,0 +1,14 @@
+[lint]
+# Choose from list of rules: <https://docs.astral.sh/ruff/rules/>
+select = [
+    "E", "W",  # PEP8 code styles
+    "I",       # isort
+    "F",       # pyflakes
+    "PL",      # pylint
+    "Q",       # flake8-quotes
+    "C90",     # code complexity
+]
+ignore = [
+    "PLR2004",  # magic constants
+]
+
