@@ -10,10 +10,13 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = ">=3.8"
 numpy = ">=1.24.1"
-matplotlib = "^3.6.3"
-scipy = "^1.10.0"
-tqdm = "^4.65.0"
-configargparse = "^1.7"
+matplotlib = ">=3.6.3"
+scipy = [
+    {version = ">=1.10.0,<1.11", python = ">=3.8,<3.9"},
+    {version = ">=1.10.0", python = ">=3.9"}
+]
+tqdm = ">=4.65.0"
+configargparse = ">=1.7"
 
 [tool.poetry.scripts]
 # Poetry 1.2.0a1 required for script file reference
