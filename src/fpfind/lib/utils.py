@@ -10,7 +10,9 @@ import numpy as np
 import scipy
 
 from fpfind import NP_PRECISEFLOAT
-from fpfind.lib.parse_epochs import epoch2int, int2epoch, read_T1, read_T2
+from fpfind.lib.constants import TSRES
+from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
+from fpfind.lib.parse_timestamps import _read_a1_kth_timestamp
 
 inbuilt_round = round
 
@@ -489,3 +491,26 @@ def parse_docstring_description(docstring):
     d = re.sub(r"\n+", " ", d)
     d = re.sub(placeholder, "\n\n", d)
     return d
+
+
+def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
+    (t,), _ = _read_a1_kth_timestamp(
+        filename,
+        [0],
+        legacy,
+        resolution=resolution,
+        fractional=False,
+    )
+    epoch = epoch2int(date2epoch())  # get current epoch (32-bit)
+    # epoch_header = epoch >> 17  # increments every ~20h (first 15 bits)
+
+    if full:
+        epochint = _read_a1_kth_timestamp(
+            filename, [0], legacy=True, resolution=TSRES.PS125, fractional=False
+        )
+    epochint = (epoch & ~((1 << 17) - 1)) | (int(t) >> 37)  # 54 - 17
+    return int2epoch(epochint)
+
+
+# def chopper_timestamp(filename, resolution=TSRES.PS125, legacy=False, full=False):
+#     pass
