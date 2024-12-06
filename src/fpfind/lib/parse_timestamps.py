@@ -331,7 +331,7 @@ def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
         t = t / (TSRES.PS4.value / resolution.value)
     elif resolution is not TSRES.PS4:  # short-circuit
         t = np.array(t, dtype=np.uint64)
-        t = t // (TSRES.PS4.value // resolution.value)
+        t = t // int(TSRES.PS4.value // resolution.value)
     return t
 
 
