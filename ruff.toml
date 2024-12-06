@@ -10,5 +10,8 @@ select = [
 ]
 ignore = [
     "PLR2004",  # magic constants
+    "PLW2901",  # override for-loop assignments
+    "PLR0913",  # large number of arguments
+    "C901",     # complex methods
 ]
 
