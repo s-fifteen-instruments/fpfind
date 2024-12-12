@@ -594,13 +594,18 @@ def print_statistics(filename: str, t: list, p: list):
     """
     # Collect statistics
     count = np.count_nonzero
+    _ch1 = (count(p & 0b0001 != 0),)
+    _ch2 = (count(p & 0b0010 != 0),)
+    _ch3 = (count(p & 0b0100 != 0),)
+    _ch4 = (count(p & 0b1000 != 0),)
     print_statistics_report(
         filename=filename,
         num_events=len(t),
-        ch1_counts=count(p & 0b0001 != 0),
-        ch2_counts=count(p & 0b0010 != 0),
-        ch3_counts=count(p & 0b0100 != 0),
-        ch4_counts=count(p & 0b1000 != 0),
+        num_detections=_ch1 + _ch2 + _ch3 + _ch4,
+        ch1_counts=_ch1,
+        ch2_counts=_ch2,
+        ch3_counts=_ch3,
+        ch4_counts=_ch4,
         multi_counts=count(np.isin(p, (0, 1, 2, 4, 8), invert=True)),
         non_counts=count(p == 0),
         start_timestamp=t[0],
@@ -621,6 +626,7 @@ def print_statistics_stream(
     first_t = None
     last_t = None
     num_events = 0
+    num_detections = 0
     count_p1 = 0
     count_p2 = 0
     count_p3 = 0
@@ -634,11 +640,16 @@ def print_statistics_stream(
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)
     for t, p in stream:
+        _ch1 = count(p & 0b0001 != 0)
+        _ch2 = count(p & 0b0010 != 0)
+        _ch3 = count(p & 0b0100 != 0)
+        _ch4 = count(p & 0b1000 != 0)
         num_events += len(p)
-        count_p1 += count(p & 0b0001 != 0)
-        count_p2 += count(p & 0b0010 != 0)
-        count_p3 += count(p & 0b0100 != 0)
-        count_p4 += count(p & 0b1000 != 0)
+        num_detections += _ch1 + _ch2 + _ch3 + _ch4
+        count_p1 += _ch1
+        count_p2 += _ch2
+        count_p3 += _ch3
+        count_p4 += _ch4
         count_mp += count(np.isin(p, (0, 1, 2, 4, 8), invert=True))
         count_np += count(p == 0)
         set_p.update(np.unique(p))
@@ -652,6 +663,7 @@ def print_statistics_stream(
     print_statistics_report(
         filename=filename,
         num_events=num_events,
+        num_detections=num_detections,
         ch1_counts=count_p1,
         ch2_counts=count_p2,
         ch3_counts=count_p3,
@@ -667,6 +679,7 @@ def print_statistics_stream(
 def print_statistics_report(
     filename: str,
     num_events: int,
+    num_detections: int,
     ch1_counts: Optional[int] = None,
     ch2_counts: Optional[int] = None,
     ch3_counts: Optional[int] = None,
@@ -692,6 +705,7 @@ def print_statistics_report(
     print(f"Total events    : {num_events:>{width}d}")
     if num_events != 0:
         duration = (end_timestamp - start_timestamp) * 1e-9
+        print(f"  Detections    : {num_detections:>{width}d}")
         print(f"  Channel 1     : {ch1_counts:>{width}d}")
         print(f"  Channel 2     : {ch2_counts:>{width}d}")
         print(f"  Channel 3     : {ch3_counts:>{width}d}")
@@ -702,7 +716,8 @@ def print_statistics_report(
         print(f"  ~ start    : {start_timestamp*1e-9:>15.9f}")
         print(f"  ~ end      : {end_timestamp*1e-9:>15.9f}")
         print(f"Event rate (/s) : {int(num_events//duration)}")
-        print(f"Detection patterns: {patterns}")
+        print(f"  Detections    : {int(num_detections//duration)}")
+        print(f"Detection patterns: {sorted(map(int, patterns))}")
 
 
 ###############
