@@ -9,12 +9,14 @@ Requirements:
 * Python 3.8 and above, running in Linux
 * `gcc` (if running `freqcd`, preferably in PATH for auto-compilation)
 
+The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags). For example, to install the `v2.2.x` version:
+
 ```bash
 # Remote installation
-pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git
+pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git@v2.2.x
 
 # Local installation
-git clone https://github.com/s-fifteen-instruments/fpfind.git
+git clone -b "v2.2.x" https://github.com/s-fifteen-instruments/fpfind.git
 cd fpfind && pip3 install .
 ```
 
