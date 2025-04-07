@@ -5,56 +5,67 @@ Changelog:
     2024-02-02, Justin: Init
 """
 
+import argparse
 import logging
 import sys
 
-import argparse
+import kochen  # v0.2024.4
+import kochen.logging
+import kochen.scriptutil
 import matplotlib.pyplot as plt
 import numpy as np
-
-import kochen  # v0.2024.4
-import kochen.scriptutil
-import kochen.logging
 from S15lib.g2lib.g2lib import histogram
 
-from fpfind.lib.parse_timestamps import read_a1
-from fpfind.lib.utils import (
-    get_first_overlapping_epoch, get_timestamp,
-    normalize_timestamps, slice_timestamps,
-)
-
-from fpfind.lib.utils import normalize_timestamps
 from fpfind.lib.parse_timestamps import read_a1_overlapping
+from fpfind.lib.utils import (
+    get_first_overlapping_epoch,
+    get_timestamp,
+    normalize_timestamps,
+)
 
 _ENABLE_BREAKPOINT = False
 logger = logging.getLogger(__name__)
 
-def plotter(alice, bob, freq, time, width, resolution, window=800, save=False, normalize=False, decimation=1):
-    bob = (bob - time) / (1 + freq*1e-6)
+
+def plotter(
+    alice,
+    bob,
+    freq,
+    time,
+    width,
+    resolution,
+    window=800,
+    save=False,
+    normalize=False,
+    decimation=1,
+):
+    bob = (bob - time) / (1 + freq * 1e-6)
     ys, xs, stats = histogram(
-        alice, bob, duration=width, resolution=resolution,
-        statistics=True, window=window,
+        alice,
+        bob,
+        duration=width,
+        resolution=resolution,
+        statistics=True,
+        window=window,
     )
     # Custom breakpoint for experimentation
     if _ENABLE_BREAKPOINT:
         globals().update(locals())  # write all local variables to global scope
-        raise
+        raise  # noqa: PLE0704
 
     if decimation > 1:
         ys = ys[::decimation]
         xs = xs[::decimation]
 
-
     elapsed = (alice[-1] - alice[0]) * 1e-9
     _center = ys[500:1500]
     _sides = np.array(list(ys[:500]) + list(ys[1500:]))
     coincidences = np.sum(_center) - np.sum(_sides) * len(_center) / len(_sides)
-    # coincidences = stats.signal.sum() - (stats.background.sum() * stats.signal.size / stats.background.size)
 
-    s1 = len(alice)/elapsed
-    s2 = len(bob)/elapsed
-    c = coincidences/elapsed
-    print(f"Totals:")
+    s1 = len(alice) / elapsed
+    s2 = len(bob) / elapsed
+    c = coincidences / elapsed
+    print("Totals:")
     print(f"  S1: {len(alice):d}")
     print(f"  S2: {len(bob):d}")
     print(f"  C:  {coincidences:.0f}")
@@ -85,7 +96,8 @@ def plotter(alice, bob, freq, time, width, resolution, window=800, save=False, n
         plt.savefig(save)
     plt.show()
     globals().update(locals())
-    raise
+    raise  # noqa: PLE0704
+
 
 def attenuate(ts, transmission=1):
     if transmission >= 1:
@@ -93,11 +105,13 @@ def attenuate(ts, transmission=1):
     mask = np.random.random(size=ts.size) < transmission
     return ts[mask]
 
-def main():
-    global _ENABLE_BREAKPOINT
+
+def main():  # noqa: PLR0915
+    global _ENABLE_BREAKPOINT  # noqa: PLW0603
     parser = kochen.scriptutil.generate_default_parser(__doc__, "fpfind")
 
     # Boilerplate
+    # fmt: off
     pgroup_config = parser.add_argument_group("display/configuration")
     pgroup_config.add_argument(
         "-h", "--help", action="store_true",
@@ -164,7 +178,7 @@ def main():
         help="Specify time delay, in units of ns (default: %(default)f)")
     pgroup.add_argument(
         "--width", type=float, default=1000,
-        help="Specify one-sided width of histogram, in units of ns (default: %(default)f)")
+        help="Specify one-sided width of histogram, in units of ns (default: %(default)f)")  # noqa: E501
     pgroup.add_argument(
         "-r", "--resolution", "--final-res", type=float, default=1,
         help="Specify resolution of histogram, in units of ns (default: %(default)f)")
@@ -180,7 +194,7 @@ def main():
     pgroup.add_argument(
         "--decimation", type=int, default=1,
         help="Take only every N-th point, for clarity (default: %(default)d)")
-
+    # fmt: on
 
     # Parse arguments and configure logging
     args = kochen.scriptutil.parse_args_or_help(parser, ignore_unknown=True)
@@ -201,25 +215,29 @@ def main():
 
         # Automatically choose first overlapping epoch if not supplied manually
         first_epoch, available_epochs = get_first_overlapping_epoch(
-            args.sendfiles, args.t1files,
-            first_epoch=args.first_epoch, return_length=True,
+            args.sendfiles,
+            args.t1files,
+            first_epoch=args.first_epoch,
+            return_length=True,
         )
         if available_epochs < args.num_epochs + args.skip_epochs:
             logger.warning("  Insufficient epochs")
 
         # Read epochs
         alice = get_timestamp(
-            args.sendfiles, "T2",
-            first_epoch, args.skip_epochs, args.num_epochs)
+            args.sendfiles, "T2", first_epoch, args.skip_epochs, args.num_epochs
+        )
         bob = get_timestamp(
-            args.t1files, "T1",
-            first_epoch, args.skip_epochs, args.num_epochs)
+            args.t1files, "T1", first_epoch, args.skip_epochs, args.num_epochs
+        )
 
     elif args.target is not None and args.reference is not None:
         logger.info("  Reading from timestamp files...")
         _is_reading_ts = True
         (alice, bob), _ = read_a1_overlapping(
-            args.reference, args.target, legacy=args.legacy,
+            args.reference,
+            args.target,
+            legacy=args.legacy,
             duration=args.duration + args.skip_duration,
         )
 
@@ -235,7 +253,17 @@ def main():
     alice = attenuate(alice, 1)
     bob = attenuate(bob, 1)
 
-    plotter(alice, bob, args.df, args.dt, 2*args.width, resolution=args.resolution, save=args.save_plot, normalize=args.normalize, decimation=args.decimation)
+    plotter(
+        alice,
+        bob,
+        args.df,
+        args.dt,
+        2 * args.width,
+        resolution=args.resolution,
+        save=args.save_plot,
+        normalize=args.normalize,
+        decimation=args.decimation,
+    )
 
 
 if __name__ == "__main__":
