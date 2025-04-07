@@ -71,6 +71,7 @@ def read_a0(
     legacy: bool = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     """Converts a0 timestamp format into timestamps and detector pattern.
 
@@ -94,6 +95,9 @@ def read_a0(
     """
     data = np.genfromtxt(filename, delimiter="\n", dtype="U8")
     data = np.array([int(v, 16) for v in data]).reshape(-1, 2)
+    if ignore_rollover:
+        r = (data[:, 0] & 0b10000).astype(bool)  # check rollover flag
+        data = data[~r]
     t = (np.uint64(data[:, 1]) << 22) + (data[:, 0] >> 10)
     t = _format_timestamps(t, resolution, fractional)
     p = data[:, 0] & 0xF
@@ -105,6 +109,7 @@ def _read_a1(
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     """See documentation for 'read_a0'."""
     high_pos = 1
@@ -113,6 +118,9 @@ def _read_a1(
         high_pos, low_pos = low_pos, high_pos
     with open(filename, "rb") as f:
         data = np.fromfile(file=f, dtype="=I").reshape(-1, 2)
+    if ignore_rollover:
+        r = (data[:, low_pos] & 0b10000).astype(bool)  # check rollover flag
+        data = data[~r]
     t = (np.uint64(data[:, high_pos]) << 22) + (data[:, low_pos] >> 10)
     t = _format_timestamps(t, resolution, fractional)
     p = data[:, low_pos] & 0xF
@@ -124,10 +132,14 @@ def read_a2(
     legacy: bool = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     """See documentation for 'read_a0'."""
     data = np.genfromtxt(filename, delimiter="\n", dtype="U16")
     data = np.array([int(v, 16) for v in data])
+    if ignore_rollover:
+        r = (data & 0b10000).astype(bool)  # check rollover flag
+        data = data[~r]
     t = np.uint64(data >> 10)
     t = _format_timestamps(t, resolution, fractional)
     p = data & 0xF
@@ -146,6 +158,7 @@ def read_a1(
     invert: bool = False,
     buffer_size: int = 100_000,
     relative_time: bool = False,
+    ignore_rollover: bool = False,
 ):
     """Wrapper to sread_a1 for efficiently reading subsets of whole file.
 
@@ -163,9 +176,11 @@ def read_a1(
     be shifted relative to the first timestamp.
     """
     if buffer_size is None:
-        return _read_a1(filename, legacy, resolution, fractional)
+        return _read_a1(filename, legacy, resolution, fractional, ignore_rollover)
 
-    streamer, _ = sread_a1(filename, legacy, resolution, fractional, buffer_size)
+    streamer, _ = sread_a1(
+        filename, legacy, resolution, fractional, buffer_size, ignore_rollover
+    )
     ts = []
     ps = []
     commenced_reading = False
@@ -203,6 +218,7 @@ def sread_a1(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     buffer_size: int = 100_000,
+    ignore_rollover: bool = False,
 ):
     """Block streaming variant of 'read_a1'.
 
@@ -245,7 +261,7 @@ def sread_a1(
                 buffer = f.read(buffer_size * 8)  # 8 bytes per event
                 if len(buffer) == 0:
                     break
-                yield _parse_a1(buffer, legacy, resolution, fractional)
+                yield _parse_a1(buffer, legacy, resolution, fractional, ignore_rollover)
 
     size = pathlib.Path(filename).stat().st_size
     num_batches = int(((size - 1) // (buffer_size * 8)) + 1)
@@ -258,6 +274,7 @@ def sread_a0(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     buffer_size: int = 100_000,
+    ignore_rollover: bool = False,
 ):
     """See documentation for 'sread_a1'"""
 
@@ -270,6 +287,9 @@ def sread_a0(
 
                 data = buffer.strip().split("\n")
                 data = np.array([int(v, 16) for v in data]).reshape(-1, 2)
+                if ignore_rollover:
+                    r = (data[:, 0] & 0b10000).astype(bool)  # check rollover flag
+                    data = data[~r]
                 t = (np.uint64(data[:, 1]) << 22) + (data[:, 0] >> 10)
                 t = _format_timestamps(t, resolution, fractional)
                 p = data[:, 0] & 0xF
@@ -286,6 +306,7 @@ def sread_a2(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     buffer_size: int = 100_000,
+    ignore_rollover: bool = False,
 ):
     """See documentation for 'sread_a1'"""
 
@@ -298,6 +319,9 @@ def sread_a2(
 
                 data = buffer.strip().split("\n")
                 data = np.array([int(v, 16) for v in data])
+                if ignore_rollover:
+                    r = (data & 0b10000).astype(bool)  # check rollover flag
+                    data = data[~r]
                 t = np.uint64(data >> 10)
                 t = _format_timestamps(t, resolution, fractional)
                 p = data & 0xF
@@ -340,6 +364,7 @@ def read_a1_start_end(
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     t, _ = _read_a1_kth_timestamp(
         filename,
@@ -347,6 +372,7 @@ def read_a1_start_end(
         legacy,
         resolution,
         fractional,
+        ignore_rollover,
     )
     return t * 1e-9
 
@@ -357,6 +383,7 @@ def _read_a1_kth_timestamp(
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     filesize = pathlib.Path(filename).stat().st_size
     num_events = filesize / 8  # 8 bytes per event
@@ -375,7 +402,7 @@ def _read_a1_kth_timestamp(
             f.seek(int(_k) * 8, io.SEEK_SET)  # should be O(1) in modern filesystems
             buffer.extend(f.read(8))
 
-    return _parse_a1(buffer, legacy, resolution, fractional)
+    return _parse_a1(buffer, legacy, resolution, fractional, ignore_rollover)
 
 
 def _parse_a1(
@@ -383,12 +410,16 @@ def _parse_a1(
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
+    ignore_rollover: bool = False,
 ):
     high_pos = 1
     low_pos = 0
     if legacy:
         high_pos, low_pos = low_pos, high_pos
     data = np.frombuffer(buffer, dtype="=I").reshape(-1, 2)
+    if ignore_rollover:
+        r = (data[:, low_pos] & 0b10000).astype(bool)  # check rollover flag
+        data = data[~r]
     t = (np.uint64(data[:, high_pos]) << 22) + (data[:, low_pos] >> 10)
     t = _format_timestamps(t, resolution, fractional)
     p = data[:, low_pos] & 0xF
