@@ -306,7 +306,7 @@ def read_a0_from_buffer(
 ):
     data = buffer.strip().split("\n")
     data = np.array([int(v, 16) for v in data]).reshape(-1, 2)
-    return _parse_a0(data, legacy, resolution, fractional, ignore_rollover)
+    return _parse_a0(data, resolution, fractional, ignore_rollover)
 
 
 def read_a2_from_buffer(
@@ -318,7 +318,7 @@ def read_a2_from_buffer(
 ):
     data = buffer.strip().split("\n")
     data = np.array([int(v, 16) for v in data])
-    return _parse_a2(data, legacy, resolution, fractional, ignore_rollover)
+    return _parse_a2(data, resolution, fractional, ignore_rollover)
 
 
 ########################
