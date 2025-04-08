@@ -23,7 +23,7 @@ configargparse = ">=1.7"
 freqcd = {reference = "src/fpfind/freqcd", type = "file"}
 freqservo = "fpfind.freqservo:main"
 fpfind = "fpfind.fpfind:main"
-fpplot = "fpfind.fpplot:main"
+fpplot = "fpfind.apps.fpplot:main"
 parse_timestamps = "fpfind.lib.parse_timestamps:main"
 parse-timestamps = "fpfind.lib.parse_timestamps:main"
 generate_freqcd_testcase = "fpfind.lib.generate_freqcd_testcase:main"
