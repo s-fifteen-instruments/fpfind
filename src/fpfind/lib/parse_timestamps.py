@@ -1037,6 +1037,11 @@ def generate_parser():
         action="store_true",
         help="Disable batch streaming (retained for legacy reasons)",
     )
+    parser.add_argument(
+        "--rollover",
+        action="store_true",
+        help="Include rollover dummy events (generally unwanted)",
+    )
 
     pgroup = parser.add_argument_group("Timestamp formats")
     pgroup.add_argument(
@@ -1104,6 +1109,7 @@ def main():
 
     args = parser.parse_args()
     print_only = args.outfile is None
+    ignore_rollover = not args.rollover
 
     read = [read_a0, read_a1, read_a2][int(args.A)]
     sread = [sread_a0, sread_a1, sread_a2][int(args.A)]
@@ -1142,7 +1148,7 @@ def main():
 
     # Use legacy read-write mechanisms
     if args.inmemory:
-        t, p = read(filepath, args.X)
+        t, p = read(filepath, args.X, ignore_rollover=ignore_rollover)
         t, p = event_filter(t, p)
         if print_only:
             print_statistics(filepath, t, p)
@@ -1153,7 +1159,7 @@ def main():
     elif print_only:
         if has_filtering:
             stream, num_batches = sread(
-                filepath, args.X
+                filepath, args.X, ignore_rollover=ignore_rollover
             )  # default 1ns floating-point resolution
             stream = inline_filter(stream)
             print_statistics_stream(
@@ -1161,7 +1167,9 @@ def main():
             )
         else:
             # Disable timestamp formatting to speed up reads
-            stream, num_batches = sread(filepath, args.X, TSRES.PS4, False)
+            stream, num_batches = sread(
+                filepath, args.X, TSRES.PS4, False, ignore_rollover=ignore_rollover
+            )
             print_statistics_stream(
                 filepath,
                 stream,
@@ -1172,7 +1180,9 @@ def main():
 
     # Write out
     else:
-        stream, num_batches = sread(filepath, args.X, TSRES.PS4, False)
+        stream, num_batches = sread(
+            filepath, args.X, TSRES.PS4, False, ignore_rollover=ignore_rollover
+        )
         stream = inline_filter(stream, TSRES.PS4)
         swrite(
             args.outfile,
