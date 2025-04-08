@@ -788,6 +788,10 @@ def print_statistics_report(
     """Prints the statistics report.
 
     All optional fields must be present if 'num_events' > 0.
+
+    Events and detections have the following definitions: multi-channel events
+    are counted as a single event for the former, and as separate events for
+    the latter.
     """
 
     print(f"Name: {str(filename)}")
@@ -810,8 +814,8 @@ def print_statistics_report(
         print(f"Duration (s) : {duration:15.9f}")
         print(f"  ~ start    : {start_timestamp*1e-9:>15.9f}")
         print(f"  ~ end      : {end_timestamp*1e-9:>15.9f}")
-        print(f"Event rate (/s) : {int(num_events//duration)}")
-        print(f"  Detections    : {int(num_detections//duration)}")
+        print(f"Event rate (/s)  : {int(num_events//duration)}")
+        print(f"  Detection rate : {int(num_detections//duration)}")
         print(f"Detection patterns: {sorted(map(int, patterns))}")
 
 
