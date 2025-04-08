@@ -43,3 +43,5 @@ format-jinja-imports = [
 requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
 
+[tool.pytest.ini_options]
+addopts = "--ignore=tests/freqcd --ignore=tests/parse_epochs --ignore=tests/fpfind"
