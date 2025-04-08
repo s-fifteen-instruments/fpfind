@@ -7,25 +7,34 @@ import pytest
 # Note: np.double only goes up to 1.79e308, while np.longdouble
 #       supports up to 1.19e4932 (if implemented as 80-bit float).
 #       For more information, see 'np.finfo(np.longdouble)'.
-is_extfloat_supported = (np.longdouble("1e309") != np.inf)
+is_extfloat_supported = np.longdouble("1e309") != np.inf
 if not is_extfloat_supported:
     warnings.warn("Extended precision float (80-bit) is not supported.")
+
 
 def pytest_addoption(parser):
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"
     )
     parser.addoption(
-        "--float80", action="store_true", help="Check support for 80-bit extended precision floats"
+        "--float80",
+        action="store_true",
+        help="Check support for 80-bit extended precision floats",
     )
     parser.addoption(
-        "--float64", action="store_true", help="Check support for 64-bit precision floats"
+        "--float64",
+        action="store_true",
+        help="Check support for 64-bit precision floats",
     )
 
+
 def pytest_configure(config):
+    # fmt: off
     config.addinivalue_line("markers", "slow: mark test as slow to run")
-    config.addinivalue_line("markers", "float80: mark test as requiring 80-bit float support")
-    config.addinivalue_line("markers", "float64: mark test as requiring 64-bit float as fallback for extended precision container")
+    config.addinivalue_line("markers", "float80: mark test as requiring 80-bit float support")  # noqa: E501
+    config.addinivalue_line("markers", "float64: mark test as requiring 64-bit float as fallback for extended precision container")  # noqa: E501
+    # fmt: on
+
 
 def pytest_collection_modifyitems(config, items):
     skip_slow = pytest.mark.skip(reason="need --runslow option to run")
@@ -36,12 +45,17 @@ def pytest_collection_modifyitems(config, items):
 
     # Ensure float64 and float80 not given at the same time
     if config.getoption("--float80") and config.getoption("--float64"):
-        raise ValueError("'--float64' and '--float80' cannot be supplied at the same time")
-    
+        raise ValueError(
+            "'--float64' and '--float80' cannot be supplied at the same time"
+        )
+
     skip_float80 = pytest.mark.skip(reason="no support for extended precision")
-    skip_float64 = pytest.mark.skip(reason="extended precision supported, ignoring float64 tests")
-    if ((not is_extfloat_supported) and (not config.getoption("--float80"))) \
-            or config.getoption("--float64"):
+    skip_float64 = pytest.mark.skip(
+        reason="extended precision supported, ignoring float64 tests"
+    )
+    if (
+        (not is_extfloat_supported) and (not config.getoption("--float80"))
+    ) or config.getoption("--float64"):
         for item in items:
             if "float80" in item.keywords:
                 item.add_marker(skip_float80)
@@ -49,3 +63,13 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "float64" in item.keywords:
                 item.add_marker(skip_float64)
+
+
+@pytest.fixture
+def path_tests(pytestconfig):
+    return pytestconfig.rootpath / "tests"
+
+
+@pytest.fixture
+def path_tsdata(path_tests):
+    return path_tests / "data"

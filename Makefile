@@ -31,7 +31,7 @@ clean:
 	rm -f ${DIR}/freqcd
 compile-schematic:
 	java -jar docs/plantuml* docs/schematic.wsg
-	
+
 # Python package management
 install: install-poetry
 	poetry install
@@ -47,3 +47,11 @@ read:
 readx:
 	@-xxd -e -g 4 -c 8 $(READ_ARGS) | cut -b1-27
 
+
+# Other shortcuts:
+#
+# - Convert 'a1' to 'a2':
+#     xxd -e -g 4 -c 8 <FILE> | cut -b11-18,20-27
+#
+# - Convert 'a1' to 'a0':
+#     xxd -e -g 4 -c 4 <FILE> | cut -b11-18 | sed -n 'h;n;p;g;p'

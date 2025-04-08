@@ -1,5 +1,4 @@
 # Ignore data directory and symlinks
-data
 src/fpfind/freqcd_path
 docs/plantuml*
 
