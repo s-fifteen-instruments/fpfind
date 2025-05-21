@@ -535,7 +535,11 @@ def read_a1_overlapping(
 
 
 def _consolidate_events(
-    t: list, p: list, resolution: TSRES = TSRES.NS1, sort: bool = False
+    t: list,
+    p: list,
+    resolution: TSRES = TSRES.NS1,
+    sort: bool = False,
+    allow_duplicates: bool = True,
 ):
     """Packs events into standard a1 timestamp format.
 
@@ -547,6 +551,8 @@ def _consolidate_events(
         p: Detector pattern array.
         resolution: Resolution of timestamps in timestamp array.
         sort: If events should be further sorted in chronological order.
+        allow_duplicates: If events with the same timestamp should be combined,
+            i.e. similar to the output from an actual time tagger.
 
     Note:
         float128 is needed, since float64 only encodes 53-bits of precision,
@@ -558,22 +564,47 @@ def _consolidate_events(
     data += np.array(p).astype(np.uint64)
     if sort:
         data = np.sort(data)
+
+    # Duplicate removal can only be executed on a sorted array
+    if not allow_duplicates:
+        ts = data >> 10
+        idxs = np.concatenate(([0], np.flatnonzero(ts[1:] != ts[:-1]) + 1, [len(ts)]))
+        _t = ts[idxs[:-1]]
+        _p = np.zeros_like(_t)
+
+        # Combine all detector patterns for the same timestamp
+        # TODO: Needs optimization, since for loop is slow
+        for i in range(len(idxs) - 1):
+            left, right = idxs[i], idxs[i + 1]
+            _p[i] = np.bitwise_or.reduce(p[left:right])
+        data = (_t << 10) + _p
+
     return data
 
 
 def write_a2(
-    filename: str, t: list, p: list, legacy: bool = None, resolution: TSRES = TSRES.NS1
+    filename: str,
+    t: list,
+    p: list,
+    legacy: bool = None,
+    resolution: TSRES = TSRES.NS1,
+    allow_duplicates: bool = True,
 ):
-    data = _consolidate_events(t, p, resolution)
+    data = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     with open(filename, "w") as f:
         for line in data:
             f.write(f"{line:016x}\n")
 
 
 def write_a0(
-    filename: str, t: list, p: list, legacy: bool = None, resolution: TSRES = TSRES.NS1
+    filename: str,
+    t: list,
+    p: list,
+    legacy: bool = None,
+    resolution: TSRES = TSRES.NS1,
+    allow_duplicates: bool = True,
 ):
-    events = _consolidate_events(t, p, resolution)
+    events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     data = np.empty((2 * events.size,), dtype=np.uint32)
     data[0::2] = events & 0xFFFFFFFF
     data[1::2] = events >> 32
@@ -583,9 +614,14 @@ def write_a0(
 
 
 def write_a1(
-    filename: str, t: list, p: list, legacy: bool = False, resolution: TSRES = TSRES.NS1
+    filename: str,
+    t: list,
+    p: list,
+    legacy: bool = False,
+    resolution: TSRES = TSRES.NS1,
+    allow_duplicates: bool = True,
 ):
-    events = _consolidate_events(t, p, resolution)
+    events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     with open(filename, "wb") as f:
         for line in events:
             if legacy:
@@ -606,6 +642,7 @@ def swrite_a1(
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
+    allow_duplicates: bool = True,
 ):
     """Block streaming variant of 'write_a1'.
 
@@ -628,7 +665,9 @@ def swrite_a1(
         stream = tqdm.tqdm(stream, total=num_batches)
     with open(filename, "wb") as f:
         for t, p in stream:
-            events = _consolidate_events(t, p, resolution)
+            events = _consolidate_events(
+                t, p, resolution, allow_duplicates=allow_duplicates
+            )
             for line in events:
                 if legacy:
                     line = int(line)
@@ -643,13 +682,16 @@ def swrite_a0(
     legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
+    allow_duplicates: bool = True,
 ):
     """See documentation for 'swrite_a1'."""
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)
     with open(filename, "w") as f:
         for t, p in stream:
-            events = _consolidate_events(t, p, resolution)
+            events = _consolidate_events(
+                t, p, resolution, allow_duplicates=allow_duplicates
+            )
             data = np.empty((2 * events.size,), dtype=np.uint32)
             data[0::2] = events & 0xFFFFFFFF
             data[1::2] = events >> 32
@@ -664,13 +706,16 @@ def swrite_a2(
     legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
+    allow_duplicates: bool = True,
 ):
     """See documentation for 'swrite_a1'."""
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)
     with open(filename, "w") as f:
         for t, p in stream:
-            data = _consolidate_events(t, p, resolution)
+            data = _consolidate_events(
+                t, p, resolution, allow_duplicates=allow_duplicates
+            )
             for line in data:
                 f.write(f"{line:016x}\n")
 
