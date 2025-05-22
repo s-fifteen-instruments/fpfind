@@ -17,6 +17,7 @@ scipy = [
 ]
 tqdm = ">=4.65.0"
 configargparse = ">=1.7"
+numba = ">=0.57.0"
 
 [tool.poetry.scripts]
 # Poetry 1.2.0a1 required for script file reference

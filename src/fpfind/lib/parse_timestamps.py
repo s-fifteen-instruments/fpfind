@@ -56,6 +56,7 @@ import sys
 import warnings
 from typing import Optional
 
+import numba
 import numpy as np
 import tqdm
 
@@ -534,6 +535,43 @@ def read_a1_overlapping(
 ########################
 
 
+@numba.njit(parallel=True)
+def _duplicate_event_removal(data):
+    """Subroutine for _consolidate_events().
+
+    On top of removing duplicate timestamps, this function also merges duplicate
+    timestamps across different channels.
+
+    Note:
+        The numba optimization is critical: the runtimes are 31.7s (without numba),
+        0.5s (with numba 1s compile), 0.4s (with numba parallel 1.6s compile), for
+        a 15 Mevents timestamp file. This function is compiled lazily, i.e. only
+        when duplicate removal is required.
+    """
+    # Identify unique timestamps and their indices
+    ts = data >> np.uint64(10)
+    idxs = np.flatnonzero(ts[1:] != ts[:-1]) + 1
+    idxs = np.concatenate((np.array([np.int64(0)]), idxs, np.array([ts.size])))
+    _t = ts[idxs[:-1]]
+    _p = np.zeros_like(_t)
+
+    # 'p' in principle can be supplied directly from '_consolidate_events()', but
+    # we re-extract here from 'data' for clarity + usability. Negligible perf impact.
+    p = data & np.uint64(0b1111)
+
+    # Combine all detector patterns for the same timestamp
+    for i in numba.prange(len(idxs) - 1):
+        left, right = idxs[i], idxs[i + 1]
+        _pi = p[left]
+        for j in range(left + 1, right):
+            _pi |= p[j]
+        _p[i] = _pi
+
+    # Recombine
+    data = (_t << np.uint64(10)) + _p
+    return data
+
+
 def _consolidate_events(
     t: list,
     p: list,
@@ -567,17 +605,7 @@ def _consolidate_events(
 
     # Duplicate removal can only be executed on a sorted array
     if not allow_duplicates:
-        ts = data >> 10
-        idxs = np.concatenate(([0], np.flatnonzero(ts[1:] != ts[:-1]) + 1, [len(ts)]))
-        _t = ts[idxs[:-1]]
-        _p = np.zeros_like(_t)
-
-        # Combine all detector patterns for the same timestamp
-        # TODO: Needs optimization, since for loop is slow
-        for i in range(len(idxs) - 1):
-            left, right = idxs[i], idxs[i + 1]
-            _p[i] = np.bitwise_or.reduce(p[left:right])
-        data = (_t << 10) + _p
+        data = _duplicate_event_removal(data)
 
     return data
 
