@@ -14,6 +14,12 @@ from fpfind.lib.constants import TSRES
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp
 
+# Create alias to external dependency for fast histogramming
+try:
+    from S15lib.g2lib.g2lib import histogram  # noqa: F401
+except ModuleNotFoundError:
+    pass
+
 inbuilt_round = round
 
 
