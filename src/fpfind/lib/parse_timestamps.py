@@ -1166,6 +1166,11 @@ def generate_parser():
     pgroup.add_argument(
         "--end", type=float, metavar="", help="Specify end timestamp, in seconds"
     )
+    pgroup.add_argument(
+        "--relative-time",
+        action="store_true",
+        help="Use relative time to start timestamp instead.",
+    )
 
     parser.add_argument("infile", help="Input timestamp file")
     parser.add_argument(
@@ -1177,7 +1182,7 @@ def generate_parser():
     return parser
 
 
-def main():
+def main():  # noqa: PLR0915
     # Print help if no arguments supplied
     parser = generate_parser()
     if len(sys.argv) == 1:
@@ -1202,6 +1207,15 @@ def main():
     has_filtering = (
         (args.pattern is not None) or (args.start is not None) or (args.end is not None)
     )
+
+    # Apply relative time
+    if args.relative_time and args.end is not None:
+        first_t, _ = read_a1_start_end(
+            filepath,
+            args.X,
+            ignore_rollover=ignore_rollover,
+        )
+        args.end += first_t  # default 1ns resolution
 
     def event_filter(t, p, resolution: TSRES = TSRES.NS1):
         if args.pattern is not None:
