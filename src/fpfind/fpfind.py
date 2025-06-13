@@ -38,7 +38,7 @@ from fpfind.lib._logging import get_logger, verbosity2level, set_logfile
 from fpfind.lib.utils import (
     ArgparseCustomFormatter, parse_docstring_description,
     round, generate_fft, get_timing_delay_fft, slice_timestamps, get_xcorr, get_statistics,
-    get_timestamp, get_first_overlapping_epoch, normalize_timestamps,
+    get_timestamp_pattern, get_first_overlapping_epoch, normalize_timestamps,
 )
 
 logger = get_logger(__name__, human_readable=True)
@@ -572,6 +572,15 @@ def main():
             "-z", "--skip-epochs", metavar="", type=int, default=0,
             help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
 
+        # Epoch importing arguments
+        pgroup_chselect = parser.add_argument_group("channel selection")
+        pgroup_chselect.add_argument(
+            "-m", "--reference-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from low-count side"))
+        pgroup_chselect.add_argument(
+            "-M", "--target-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from high-count side"))
+
         # fpfind parameters
         pgroup_fpfind = parser.add_argument_group("fpfind parameters")
         pgroup_fpfind.add_argument(
@@ -742,10 +751,10 @@ def main():
             logger.warning("  Insufficient epochs")
 
         # Read epochs
-        alice = get_timestamp(
+        alice, aps = get_timestamp_pattern(
             args.sendfiles, "T2",
             first_epoch, args.skip_epochs, required_epochs - args.skip_epochs)
-        bob = get_timestamp(
+        bob, bps = get_timestamp_pattern(
             args.t1files, "T1",
             first_epoch, args.skip_epochs, required_epochs - args.skip_epochs)
 
@@ -761,12 +770,18 @@ def main():
         if end - start < required_duration :
             logger.warning("  Insufficient timestamp events")
 
-        alice = read_a1(args.reference, legacy=args.legacy, end=start+required_duration)[0]
-        bob = read_a1(args.target, legacy=args.legacy, end=start+required_duration)[0]
+        alice, aps = read_a1(args.reference, legacy=args.legacy, end=start+required_duration)
+        bob, bps = read_a1(args.target, legacy=args.legacy, end=start+required_duration)
 
     else:
         logger.error("Timestamp files/epochs must be supplied with -tT/-dD")
         sys.exit(1)
+
+    # Select events only from specified channels
+    if args.reference_pattern is not None:
+        alice = alice[(aps & args.reference_pattern).astype(bool)]
+    if args.target_pattern is not None:
+        bob = bob[(bps & args.target_pattern).astype(bool)]
 
     # Normalize timestamps to common time reference near start, so that
     # frequency compensation will not shift the timing difference too far

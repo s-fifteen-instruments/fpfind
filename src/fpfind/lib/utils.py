@@ -471,6 +471,19 @@ def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
     return timestamp
 
 
+def get_timestamp_pattern(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
+    epochdir = pathlib.Path(dirname)
+    timestamp = np.array([], dtype=NP_PRECISEFLOAT)
+    patterns = np.array([], dtype=np.int64)
+    reader = read_T1 if file_type == "T1" else read_T2
+    for i in range(num_of_epochs):
+        epoch_name = epochdir / int2epoch(epoch2int(first_epoch) + skip_epoch + i)
+        ts, ps = reader(epoch_name)
+        timestamp = np.append(timestamp, ts)
+        patterns = np.append(patterns, ps)
+    return timestamp, patterns
+
+
 def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
     """Shifts timestamp arrays to reference zero.
 
