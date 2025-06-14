@@ -15,3 +15,12 @@ ignore = [
     "C901",     # complex methods
 ]
 
+[lint.per-file-ignores]
+# Ignore line length for CLI files
+"src/fpfind/fpfind.py" = [
+    "E501",     # line length 
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+    "PLW0603",  # global variables - needs eventual refactoring
+]
+
