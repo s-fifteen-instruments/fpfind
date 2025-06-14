@@ -191,8 +191,12 @@ def time_freq(
         #
         # TODO(2024-02-14): Account for the separation time when calculating
         #                   'max_wraps'.
+        min_time = 1e9  # 100ms
+        min_wraps = max(np.floor(min_time / (resolution * num_bins)), 1)
         max_wraps = np.floor(end_time / (resolution * num_bins))
-        _num_wraps = min(num_wraps, max(max_wraps, 1))  # bounded by 1 <= k <= k_max
+        _num_wraps = max(
+            min_wraps, min(max_wraps, num_wraps)
+        )  # bounded by 1 <= k_min <= k <= k_max
         _duration = _num_wraps * resolution * num_bins
         logger.debug(
             "    Iteration %s (r=%.1fns, k=%d)",
