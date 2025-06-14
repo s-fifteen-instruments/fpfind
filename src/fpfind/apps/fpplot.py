@@ -19,7 +19,7 @@ from S15lib.g2lib.g2lib import histogram
 from fpfind.lib.parse_timestamps import read_a1_overlapping
 from fpfind.lib.utils import (
     get_first_overlapping_epoch,
-    get_timestamp,
+    get_timestamp_pattern,
     normalize_timestamps,
 )
 
@@ -168,6 +168,15 @@ def main():  # noqa: PLR0915
         "-z", "--skip-epochs", metavar="", type=int, default=0,
         help="Specify number of initial epochs to skip (default: %(default)d)")
 
+    # Epoch importing arguments
+    pgroup_chselect = parser.add_argument_group("channel selection")
+    pgroup_chselect.add_argument(
+        "-m", "--reference-pattern", metavar="", type=int,
+        help="Pattern mask for selecting detector events from low-count side")
+    pgroup_chselect.add_argument(
+        "-M", "--target-pattern", metavar="", type=int,
+        help="Pattern mask for selecting detector events from high-count side")
+
     # Plotting parameters
     pgroup = parser.add_argument_group("plotting")
     pgroup.add_argument(
@@ -224,17 +233,17 @@ def main():  # noqa: PLR0915
             logger.warning("  Insufficient epochs")
 
         # Read epochs
-        alice = get_timestamp(
+        alice, aps = get_timestamp_pattern(
             args.sendfiles, "T2", first_epoch, args.skip_epochs, args.num_epochs
         )
-        bob = get_timestamp(
+        bob, bps = get_timestamp_pattern(
             args.t1files, "T1", first_epoch, args.skip_epochs, args.num_epochs
         )
 
     elif args.target is not None and args.reference is not None:
         logger.info("  Reading from timestamp files...")
         _is_reading_ts = True
-        (alice, bob), _ = read_a1_overlapping(
+        (alice, bob), (aps, bps) = read_a1_overlapping(
             args.reference,
             args.target,
             legacy=args.legacy,
@@ -244,6 +253,12 @@ def main():  # noqa: PLR0915
     else:
         logger.error("Timestamp files/epochs must be supplied with -tT/-dD")
         sys.exit(1)
+
+    # Select events only from specified channels
+    if args.reference_pattern is not None:
+        alice = alice[(aps & args.reference_pattern).astype(bool)]
+    if args.target_pattern is not None:
+        bob = bob[(bps & args.target_pattern).astype(bool)]
 
     # Normalize timestamps to common time reference near start, so that
     # frequency compensation will not shift the timing difference too far
