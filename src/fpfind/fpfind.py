@@ -20,8 +20,8 @@ Changelog:
     2023-01-31, Justin: Formalize interface for fpfind.py
 """
 
-import inspect
 import functools
+import inspect
 import os
 import sys
 import time
@@ -30,15 +30,26 @@ from pathlib import Path
 import configargparse
 import numpy as np
 
-from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
+from fpfind.lib._logging import get_logger, set_logfile, verbosity2level
 from fpfind.lib.constants import (
-    EPOCH_LENGTH, MAX_FCORR, NTP_MAXDELAY_NS, PeakFindingFailed,
+    EPOCH_LENGTH,
+    MAX_FCORR,
+    NTP_MAXDELAY_NS,
+    PeakFindingFailed,
 )
-from fpfind.lib._logging import get_logger, verbosity2level, set_logfile
+from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
 from fpfind.lib.utils import (
-    ArgparseCustomFormatter, parse_docstring_description,
-    round, generate_fft, get_timing_delay_fft, slice_timestamps, get_xcorr, get_statistics,
-    get_timestamp_pattern, get_first_overlapping_epoch, normalize_timestamps,
+    ArgparseCustomFormatter,
+    generate_fft,
+    get_first_overlapping_epoch,
+    get_statistics,
+    get_timestamp_pattern,
+    get_timing_delay_fft,
+    get_xcorr,
+    normalize_timestamps,
+    parse_docstring_description,
+    round,
+    slice_timestamps,
 )
 
 logger = get_logger(__name__, human_readable=True)
@@ -67,6 +78,8 @@ RES_REFINE_FACTOR = np.sqrt(2)
 TARGET_DF = 1e-10
 
 PROFILE_LEVEL = 0
+
+
 def profile(f):
     """Performs a simple timing profile.
 
@@ -90,8 +103,10 @@ def profile(f):
         global PROFILE_LEVEL
         pad = "  " * PROFILE_LEVEL
         logger.debug(
-            "%sSTART PROFILING", pad,
-            stacklevel=2, extra=extras,
+            "%sSTART PROFILING",
+            pad,
+            stacklevel=2,
+            extra=extras,
         )
         PROFILE_LEVEL += 1
 
@@ -102,29 +117,33 @@ def profile(f):
             end = time.time()
             elapsed = end - start
             logger.debug(
-                "%sEND PROFILING: %.0f s", pad, elapsed,
-                stacklevel=2, extra=extras,
+                "%sEND PROFILING: %.0f s",
+                pad,
+                elapsed,
+                stacklevel=2,
+                extra=extras,
             )
             PROFILE_LEVEL -= 1
 
         return result
+
     return wrapper
 
 
 # Main algorithm
 @profile
 def time_freq(
-        ats: list,
-        bts: list,
-        num_wraps: int,
-        num_bins: int,
-        resolution: float,
-        target_resolution: float,
-        threshold: float,
-        separation_duration: float,
-        quick: bool,
-        do_frequency_compensation: bool = True,
-    ):
+    ats: list,
+    bts: list,
+    num_wraps: int,
+    num_bins: int,
+    resolution: float,
+    target_resolution: float,
+    threshold: float,
+    separation_duration: float,
+    quick: bool,
+    do_frequency_compensation: bool = True,
+):
     """Perform the actual frequency compensation routine.
 
     Timestamps must already by normalized to starting time of 0ns. Whether
@@ -144,12 +163,17 @@ def time_freq(
     end_time = min(ats[-1], bts[-1])
     duration = num_wraps * resolution * num_bins
     logger.debug("  Performing peak searching...")
-    logger.debug("    Parameters:", extra={"details": [
-        f"Bins: 2^{np.int32(np.log2(num_bins)):d}",
-        f"Bin width: {resolution:.0f}ns",
-        f"Number of wraps: {num_wraps:d}",
-        f"Target resolution: {target_resolution}ns",
-    ]})
+    logger.debug(
+        "    Parameters:",
+        extra={
+            "details": [
+                f"Bins: 2^{np.int32(np.log2(num_bins)):d}",
+                f"Bin width: {resolution:.0f}ns",
+                f"Number of wraps: {num_wraps:d}",
+                f"Target resolution: {target_resolution}ns",
+            ]
+        },
+    )
 
     # Refinement loop, note resolution/duration will change during loop
     dt = 0
@@ -172,13 +196,15 @@ def time_freq(
         _duration = _num_wraps * resolution * num_bins
         logger.debug(
             "    Iteration %s (r=%.1fns, k=%d)",
-            curr_iteration, resolution, _num_wraps,
+            curr_iteration,
+            resolution,
+            _num_wraps,
         )
 
         # Perform cross-correlation
         logger.debug(
             "      Performing earlier xcorr (range: [0.00, %.2f]s)",
-            _duration*1e-9,
+            _duration * 1e-9,
         )
         ats_early = slice_timestamps(ats, 0, _duration)
         bts_early = slice_timestamps(bts, 0, _duration)
@@ -194,20 +220,15 @@ def time_freq(
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
         sig = get_statistics(ys, resolution).significance
 
-        # Custom breakpoint for experimentation
-        if _ENABLE_BREAKPOINT:
-            import matplotlib.pyplot as plt  # for quick plotting
-            a = ats; b = bts
-            globals().update(locals())  # write all local variables to global scope
-            raise
-
         # Confirm resolution on first run
         # If peak finding fails, 'dt' is not returned here:
         # guaranteed zero during first iteration
         while curr_iteration == 1:
             logger.debug(
                 "        Peak: S = %.3f, dt = %sns (resolution = %.0fns)",
-                sig, dt1, resolution,
+                sig,
+                dt1,
+                resolution,
             )
 
             # Deviation zero, due flat cross-correlation
@@ -215,29 +236,35 @@ def time_freq(
             if sig == 0:
                 raise PeakFindingFailed(
                     "Bin saturation  ",
-                    significance=sig, resolution=resolution, dt1=dt1,
+                    significance=sig,
+                    resolution=resolution,
+                    dt1=dt1,
                 )
 
             # If peak rejected, merge contiguous bins to double
             # the resolution of the peak search
             if sig >= threshold:
-                logger.debug(f"          Accepted")
+                logger.debug("          Accepted")
                 break
             else:
-                logger.debug(f"          Rejected")
+                logger.debug("          Rejected")
                 if _DISABLE_DOUBLING:
                     raise PeakFindingFailed(
                         "Low significance",
-                        significance=sig, resolution=resolution, dt1=dt1,
+                        significance=sig,
+                        resolution=resolution,
+                        dt1=dt1,
                     )
-                ys = np.sum(ys.reshape(-1, 2), axis = 1)
+                ys = np.sum(ys.reshape(-1, 2), axis=1)
                 resolution *= 2
 
             # Catch runaway resolution doubling, limited by
             if resolution > 1e4:
                 raise PeakFindingFailed(
                     "Resolution OOB  ",
-                    significance=sig, resolution=resolution, dt1=dt1,
+                    significance=sig,
+                    resolution=resolution,
+                    dt1=dt1,
                 )
 
             # Recalculate timing delay since resolution changed
@@ -247,8 +274,8 @@ def time_freq(
 
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
-        threshold_dt = buffer*max(abs(dt), 1)
-        threshold_df = buffer*max(abs(f-1), 1e-9)
+        threshold_dt = buffer * max(abs(dt), 1)
+        threshold_df = buffer * max(abs(f - 1), 1e-9)
 
         # If the duration has too few coincidences, the peak may not
         # show up at all. A peak is likely to have already been found, if
@@ -257,10 +284,13 @@ def time_freq(
         if curr_iteration != 1 and abs(dt1) > threshold_dt:
             logger.warning(
                 "      Interrupted due spurious signal:",
-                extra={"details": [
-                    f"early dt       = {dt1:10.0f} ns",
-                    f"threshold dt   = {threshold_dt:10.0f} ns",
-            ]})
+                extra={
+                    "details": [
+                        f"early dt       = {dt1:10.0f} ns",
+                        f"threshold dt   = {threshold_dt:10.0f} ns",
+                    ]
+                },
+            )
             if num_wraps < _NUM_WRAPS_LIMIT:
                 num_wraps += 1
                 logger.debug(
@@ -273,17 +303,21 @@ def time_freq(
         if abs(dt1) > NTP_MAXDELAY_NS:
             raise PeakFindingFailed(
                 "Time delay OOB  ",
-                significance=sig, resolution=resolution, dt1=dt1,
+                significance=sig,
+                resolution=resolution,
+                dt1=dt1,
             )
 
-        _dt1 = dt1; df1 = 0  # default values
+        _dt1 = dt1
+        df1 = 0  # default values
         if do_frequency_compensation:
             # TODO(2024-01-31):
             #     If signal too low, spurious peaks may occur. Implement
             #     a mechanism to retry to obtain an alternative value.
             logger.debug(
                 "      Performing later xcorr (range: [%.2f, %.2f]s)",
-                separation_duration*1e-9, (separation_duration+_duration)*1e-9,
+                separation_duration * 1e-9,
+                (separation_duration + _duration) * 1e-9,
             )
             ats_late = slice_timestamps(ats, separation_duration, _duration)
             bts_late = slice_timestamps(bts, separation_duration, _duration)
@@ -300,18 +334,20 @@ def time_freq(
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
             if curr_iteration != 1 and (
-                abs(_dt1) > threshold_dt or \
-                abs(df1)  > threshold_df
+                abs(_dt1) > threshold_dt or abs(df1) > threshold_df
             ):
                 logger.warning(
                     "      Interrupted due spurious signal:",
-                    extra={"details": [
-                        f"early dt       = {dt1:10.0f} ns",
-                        f"late dt        = {_dt1:10.0f} ns",
-                        f"threshold dt   = {threshold_dt:10.0f} ns",
-                        f"current df     = {df1*1e6:10.4f} ppm",
-                        f"threshold df   = {threshold_df*1e6:10.4f} ppm",
-                ]})
+                    extra={
+                        "details": [
+                            f"early dt       = {dt1:10.0f} ns",
+                            f"late dt        = {_dt1:10.0f} ns",
+                            f"threshold dt   = {threshold_dt:10.0f} ns",
+                            f"current df     = {df1*1e6:10.4f} ppm",
+                            f"threshold df   = {threshold_df*1e6:10.4f} ppm",
+                        ]
+                    },
+                )
                 if num_wraps < _NUM_WRAPS_LIMIT:
                     num_wraps += 1
                     logger.debug(
@@ -326,7 +362,9 @@ def time_freq(
             if abs(_dt1) > NTP_MAXDELAY_NS:
                 raise PeakFindingFailed(
                     "Time delay OOB  ",
-                    significance=sig, resolution=resolution, dt1=_dt1,
+                    significance=sig,
+                    resolution=resolution,
+                    dt1=_dt1,
                 )
 
         # Apply recursive relations
@@ -343,21 +381,30 @@ def time_freq(
         #     f' = f * fn
         #     t' = f * tn + t,  i.e. use old value of f
         dt += f * dt1
-        f  *= (1 + df1)
-        logger.debug("      Calculated timing delays:", extra={"details": [
-            f"early dt       = {dt1:10.0f} ns",
-            f"late dt        = {_dt1:10.0f} ns",
-            f"accumulated dt = {dt:10.0f} ns",
-            f"current df     = {df1*1e6:10.4f} ppm",
-            f"accumulated df = {(f-1)*1e6:10.4f} ppm",
-        ]})
+        f *= 1 + df1
+        logger.debug(
+            "      Calculated timing delays:",
+            extra={
+                "details": [
+                    f"early dt       = {dt1:10.0f} ns",
+                    f"late dt        = {_dt1:10.0f} ns",
+                    f"accumulated dt = {dt:10.0f} ns",
+                    f"current df     = {df1*1e6:10.4f} ppm",
+                    f"accumulated df = {(f-1)*1e6:10.4f} ppm",
+                ]
+            },
+        )
 
         # Throw error if compensation does not fall within bounds
         if abs(f - 1) >= MAX_FCORR:
             raise PeakFindingFailed(
                 "Compensation OOB",
-                significance=sig, resolution=resolution,
-                dt1=dt1, dt2=_dt1, dt=dt, df=f-1,
+                significance=sig,
+                resolution=resolution,
+                dt1=dt1,
+                dt2=_dt1,
+                dt=dt,
+                df=f - 1,
             )
 
         # Stop if resolution met, otherwise refine resolution
@@ -375,7 +422,7 @@ def time_freq(
 
         # Update for next iteration
         bts = (bts - dt1) / (1 + df1)
-        resolution /= (separation_duration / duration / RES_REFINE_FACTOR)
+        resolution /= separation_duration / duration / RES_REFINE_FACTOR
         resolution = max(resolution, target_resolution)
         curr_iteration += 1
 
@@ -383,21 +430,22 @@ def time_freq(
     logger.debug("      Returning results.")
     return dt, df
 
+
 @profile
 def fpfind(
-        alice: list,
-        bob: list,
-        num_wraps: int,
-        num_bins: int,
-        resolution: float,
-        target_resolution: float,
-        threshold: float,
-        separation_duration: float,
-        precompensations: list,
-        precompensation_fullscan: bool = False,
-        quick: bool = False,
-        do_frequency_compensation: bool = True,
-    ):
+    alice: list,
+    bob: list,
+    num_wraps: int,
+    num_bins: int,
+    resolution: float,
+    target_resolution: float,
+    threshold: float,
+    separation_duration: float,
+    precompensations: list,
+    precompensation_fullscan: bool = False,
+    quick: bool = False,
+    do_frequency_compensation: bool = True,
+):
     """Performs fpfind procedure.
 
     This is effectively a wrapper to 'time_freq' that performs the actual
@@ -425,17 +473,23 @@ def fpfind(
 
     # Go through all precompensations
     for df0 in df0s:
-        logger.debug("  Applied initial %.4f ppm precompensation.", df0*1e6)
+        logger.debug("  Applied initial %.4f ppm precompensation.", df0 * 1e6)
 
         # Apply frequency precompensation df0
         dt = 0
         f = 1 + df0
         try:
             dt1, df1 = time_freq(
-                alice, (bob - dt)/f,
-                num_wraps, num_bins, resolution, target_resolution,
-                threshold, separation_duration,
-                quick=quick, do_frequency_compensation=do_frequency_compensation,
+                alice,
+                (bob - dt) / f,
+                num_wraps,
+                num_bins,
+                resolution,
+                target_resolution,
+                threshold,
+                separation_duration,
+                quick=quick,
+                do_frequency_compensation=do_frequency_compensation,
             )
         except ValueError as e:
             logger.info(f"Peak finding failed, {df0*1e6:7.3f} ppm: {str(e)}")
@@ -443,10 +497,13 @@ def fpfind(
 
         # Refine estimates, using the same recursive relations
         dt += f * dt1
-        f *= (1 + df1)
-        logger.debug("  Applied another %.4f ppm compensation.", df1*1e6)
+        f *= 1 + df1
+        logger.debug("  Applied another %.4f ppm compensation.", df1 * 1e6)
         e = PeakFindingFailed(
-            "", resolution=target_resolution, dt=dt, df=f-1,
+            "",
+            resolution=target_resolution,
+            dt=dt,
+            df=f - 1,
         )
         logger.info(f"Peak found, precomp: {df0*1e6:7.3f} ppm: {str(e)}")
         # TODO: Justify the good enough frequency value
@@ -486,7 +543,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
     # Prepare pre-compensations
     if ordered:
-        df0s = np.arange(0, int((stop-start) // step + 1))  # conventional
+        df0s = np.arange(0, int((stop - start) // step + 1))  # conventional
     else:
         df0s = np.arange(1, int(stop // step + 1) * 2) // 2  # flip-flop
         df0s[::2] *= -1
@@ -498,7 +555,12 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global _ENABLE_BREAKPOINT, _DISABLE_DOUBLING, _NUM_WRAPS_LIMIT, TARGET_DF, RES_REFINE_FACTOR
+    global \
+        _ENABLE_BREAKPOINT, \
+        _DISABLE_DOUBLING, \
+        _NUM_WRAPS_LIMIT, \
+        TARGET_DF, \
+        RES_REFINE_FACTOR
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -685,7 +747,7 @@ def main():
     # Check whether options have been supplied, and print help otherwise
     args_sources = parser.get_source_to_settings_dict().keys()
     config_supplied = any(map(lambda x: x.startswith("config_file"), args_sources))
-    if (len(sys.argv) == 1 and not config_supplied):
+    if len(sys.argv) == 1 and not config_supplied:
         parser.print_help(sys.stderr)
         sys.exit(1)
 
@@ -716,14 +778,19 @@ def main():
         _DISABLE_DOUBLING = True
 
     # Verify minimum duration has been imported
-    num_bins = (1 << args.buffer_order)
+    num_bins = 1 << args.buffer_order
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
     minimum_duration = (args.separation + 2) * Ta
-    logger.debug("Reading timestamps...", extra={"details": [
-        f"Required duration: {minimum_duration*1e-9:.1f}s "
-        f"(cross-corr {Ta*1e-9:.1f}s)",
-    ]})
+    logger.debug(
+        "Reading timestamps...",
+        extra={
+            "details": [
+                f"Required duration: {minimum_duration*1e-9:.1f}s "
+                f"(cross-corr {Ta*1e-9:.1f}s)",
+            ]
+        },
+    )
 
     # fmt: off
 
@@ -765,7 +832,8 @@ def main():
         # Get only required events
         tas, tae = read_a1_start_end(args.reference, legacy=args.legacy)
         tbs, tbe = read_a1_start_end(args.target, legacy=args.legacy)
-        start = max(tas, tbs); end = min(tae, tbe)
+        start = max(tas, tbs)
+        end = min(tae, tbe)
         required_duration = (minimum_duration + Ta) * 1e-9 + args.skip_duration  # seconds
         if end - start < required_duration :
             logger.warning("  Insufficient timestamp events")
