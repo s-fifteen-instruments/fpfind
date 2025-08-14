@@ -1216,13 +1216,16 @@ def main():  # noqa: PLR0915
     )
 
     # Apply relative time
-    if args.relative_time and args.end is not None:
+    if args.relative_time:
         first_t, _ = read_a1_start_end(
             filepath,
             args.X,
             ignore_rollover=ignore_rollover,
         )
-        args.end += first_t  # default 1ns resolution
+        if args.start is not None:
+            args.start += first_t  # default 1ns resolution
+        if args.end is not None:
+            args.end += first_t
 
     def event_filter(t, p, resolution: TSRES = TSRES.NS1):
         if args.pattern is not None:
