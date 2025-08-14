@@ -12,11 +12,12 @@ import numpy as np
 import fpfind.lib.parse_timestamps as parser
 
 if len(sys.argv) < 2:
-    print("usage: tsviz.py <FILE>")
+    print("usage: tsviz.py <FILE> [legacy]")
     sys.exit(1)
 
+legacy = len(sys.argv) >= 3
 filename = sys.argv[1]
-ts, ps = parser.read_a1(filename, legacy=True, ignore_rollover=True)
+ts, ps = parser.read_a1(filename, legacy=legacy, ignore_rollover=True)
 
 
 def generate_xy(ts, ps, ch):
