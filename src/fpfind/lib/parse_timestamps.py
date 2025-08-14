@@ -282,6 +282,13 @@ def read_a1(
             commenced_reading = True
         ts.append(t)
         ps.append(p)
+
+    # Return array of correct dtype if no data
+    if len(ts) == 0:
+        t = _format_timestamps([], resolution, fractional)
+        p = np.array([], dtype=np.int32)  # consistent with %I format code
+        return t, p
+
     t = np.concatenate(ts)
     p = np.concatenate(ps)
     return t, p
