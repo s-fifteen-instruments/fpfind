@@ -1,0 +1,16 @@
+#!/bin/bash
+# Prints 'a1' timestamp files as hexadecimal text
+# Justin, 2025-08-27
+#
+# Useful for downstream textual processing, e.g. regex-filtering with grep.
+#
+# Example:
+#   00000000: 58d0f708 00000007
+#   00000008: 02c3f321 0000000a
+#   00000010: 5f184b08 00000010
+#   00000018: 6fa3fb28 00000010
+#   ...
+
+test -z "$1" && { echo "usage: show-timestamps-hex <FILE>"; exit 1; }
+xxd -e -g 4 -c 8 "$1" | cut -b1-27
+
