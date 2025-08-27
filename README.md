@@ -20,14 +20,17 @@ git clone -b "v2.2.x" https://github.com/s-fifteen-instruments/fpfind.git
 cd fpfind && pip3 install .
 ```
 
-Binaries and scripts will be exposed to the path; commonly used scripts are listed below.
+Binaries and scripts are defined in [pyproject.toml](./pyproject.toml) and will be exposed to the path; commonly used scripts are listed below.
 
 ```bash
+# For general timestamp viewing
+parse-timestamps {TIMESTAMPS}
+show-timestamps {TIMESTAMPS}
+
+# For frequency compensation (and in context of coincidence finding)
 fpfind -t {TIMESTAMPS1} -T {TIMESTAMPS2}
 freqcd -X -udF fpipe -f 568 < {TIMESTAMPS}
 [costream -V5 ... |] freqservo -V5 -udF fpipe -f 568
-parse-timestamps -A1 -X -p {TIMESTAMPS}
-show-timestamps {TIMESTAMPS}
 ```
 
 ## Motivation
