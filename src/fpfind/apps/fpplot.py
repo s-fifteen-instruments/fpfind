@@ -77,6 +77,7 @@ def plotter(
     print(f"Efficiency: {100*c/np.sqrt(s1*s2):.1f}%")
 
     # Normalize?
+    plt.subplots(figsize=(5, 3.5))
     if normalize:
         accs = s1 * s2 * elapsed * resolution * 1e-9
         yerrs = np.sqrt(ys) / accs
@@ -93,7 +94,7 @@ def plotter(
     if save:
         plt.xlim(np.min(xs), np.max(xs))
         plt.tight_layout()
-        plt.savefig(save)
+        plt.savefig(save, dpi=250)
     plt.show()
     globals().update(locals())
     raise  # noqa: PLE0704
