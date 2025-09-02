@@ -3,6 +3,7 @@
 # Justin, 2025-08-27
 #
 # Useful for downstream textual processing, e.g. regex-filtering with grep.
+# Pass '-' as argument to read from standard input instead of a file.
 #
 # Example:
 #   00000000: 01011000110100001111011100001000 00000000000000000000000000000111
@@ -11,6 +12,5 @@
 #   00000018: 01101111101000111111101100101000 00000000000000000000000000010000
 #   ...
 
-test -z "$1" && { echo "usage: show-timestamps <FILE>"; exit 1; }
+test -z "$1" && { echo "usage: show-timestamps {<FILE>|-}"; exit 1; }
 xxd -e -g 4 -c 8 "$1" | cut -b11-27 | xxd -r -p - | xxd -b -g 4 -c 8 | cut -b1-75
-
