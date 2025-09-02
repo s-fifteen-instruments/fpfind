@@ -3,16 +3,19 @@ import warnings
 
 import numpy as np
 
+
 class TSRES(enum.Enum):
     """Stores timestamp resolution information.
 
     Values assigned correspond to the number of units within a
     span of 1 nanosecond.
     """
+
     NS2 = 0.5  # S-Fifteen TDC1 timestamp
     NS1 = 1
     PS125 = 8  # CQT Red timestamp
     PS4 = 256  # S-Fifteen TDC2 timestamp
+
 
 EPOCH_LENGTH = 1 << 29  # from filespec
 FCORR_AMAXBITS = -13  # from 'freqcd.c'
@@ -34,20 +37,25 @@ if hasattr(np, "float128"):
     NP_PRECISEFLOAT = np.float128
 else:
     warnings.warn(
-        "Extended-precision floats unsupported in current numpy build on this platform: falling back to 64-bit floats instead.\n\nHint: To avoid precision loss when using time taggers with <125ps precision, read timestamps as 64-bit integers instead, e.g. 'read_a1(..., fractional=False)'."
+        "Extended-precision floats unsupported in current numpy build on this "
+        "platform: falling back to 64-bit floats instead.\n\n"
+        "Hint: To avoid precision loss when using time taggers with <125ps "
+        "precision, read timestamps as 64-bit integers instead, e.g. "
+        "'read_a1(..., fractional=False)'."
     )
+
 
 class PeakFindingFailed(ValueError):
     def __init__(
-            self,
-            message,
-            significance=None,
-            resolution=None,
-            dt1=None,
-            dt2=None,
-            dt=None,
-            df=None,
-        ):
+        self,
+        message,
+        significance=None,
+        resolution=None,
+        dt1=None,
+        dt2=None,
+        dt=None,
+        df=None,
+    ):
         self.message = message
         self.s = significance
         self.r = resolution
