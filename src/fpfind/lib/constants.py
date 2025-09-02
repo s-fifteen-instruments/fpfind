@@ -16,7 +16,7 @@ class TSRES(enum.Enum):
 
 EPOCH_LENGTH = 1 << 29  # from filespec
 FCORR_AMAXBITS = -13  # from 'freqcd.c'
-NTP_MAXDELAY_NS = 100e6  # 100ms in very asymmetric channels
+NTP_MAXDELAY_NS = 200e6  # for very *very* asymmetric channels
 
 # Derived constants
 EPOCH_DURATION = EPOCH_LENGTH * 1e-9  # in seconds
