@@ -224,6 +224,7 @@ def time_freq(
         # Confirm resolution on first run
         # If peak finding fails, 'dt' is not returned here:
         # guaranteed zero during first iteration
+        enable_bypass_significance = False
         while curr_iteration == 1:
             logger.debug(
                 "        Peak: S = %.3f, dt = %sns (resolution = %.0fns)",
@@ -242,9 +243,13 @@ def time_freq(
                     dt1=dt1,
                 )
 
+            # Ignore significance measurement if timing within acceptable
+            # regime (effective in low signal-noise regime)
+            _accepted = enable_bypass_significance and abs(dt1) <= NTP_MAXDELAY_NS
+
             # If peak rejected, merge contiguous bins to double
             # the resolution of the peak search
-            if sig >= threshold:
+            if sig >= threshold or _accepted:
                 logger.debug("          Accepted")
                 break
             else:
@@ -272,6 +277,7 @@ def time_freq(
             xs = np.arange(len(ys)) * resolution
             dt1 = get_timing_delay_fft(ys, xs)[0]
             sig = get_statistics(ys, resolution).significance
+            enable_bypass_significance = True
 
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
