@@ -4,9 +4,10 @@ import re
 import typing
 import warnings
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Tuple, Union
 
 import numpy as np
+import numpy.typing as npt
 import scipy
 
 from fpfind import NP_PRECISEFLOAT
@@ -230,7 +231,11 @@ def convert_histogram_fft(hist: list, time_bins: list):
     return hist, time_bins
 
 
-def get_timing_delay_fft(hist: list, time_bins: list, include_negative: bool = False):
+def get_timing_delay_fft(
+    hist: list,
+    time_bins: npt.NDArray[np.number],
+    include_negative: bool = False,
+) -> Tuple[np.signedinteger, np.signedinteger]:
     """Returns the timing delay.
 
     Args:
@@ -279,10 +284,10 @@ def get_top_k_delays_fft(hist: list, time_bins: list, k: int):
 
 
 def slice_timestamps(
-    ts: list,
-    start: float = None,
-    duration: float = None,
-):
+    ts: npt.NDArray[np.number],
+    start: Union[float, None] = None,
+    duration: Union[float, None] = None,
+) -> npt.NDArray[np.number]:
     if start is not None:
         ts = ts - start  # note: 'ts -= start' is in-place
         ts = ts[ts >= 0]
@@ -294,8 +299,8 @@ def slice_timestamps(
             return []
         if duration >= ts[-1]:
             warnings.warn(
-                f"Desired duration ({duration*1e-9:.3f} s) is longer "
-                f"than available data ({ts[-1]*1e-9:.3f} s)"
+                f"Desired duration ({duration * 1e-9:.3f} s) is longer "
+                f"than available data ({ts[-1] * 1e-9:.3f} s)"
             )
         ts = ts[ts < duration]
     return ts

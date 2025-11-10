@@ -29,6 +29,7 @@ from pathlib import Path
 
 import configargparse
 import numpy as np
+import numpy.typing as npt
 
 from fpfind.lib._logging import get_logger, set_logfile, verbosity2level
 from fpfind.lib.constants import (
@@ -110,8 +111,8 @@ def profile(f):
         )
         PROFILE_LEVEL += 1
 
+        start = time.time()
         try:
-            start = time.time()
             result = f(*args, **kwargs)
         finally:
             end = time.time()
@@ -133,8 +134,8 @@ def profile(f):
 # Main algorithm
 @profile
 def time_freq(
-    ats: list,
-    bts: list,
+    ats: npt.NDArray[np.number],
+    bts: npt.NDArray[np.number],
     num_wraps: int,
     num_bins: int,
     resolution: float,
@@ -343,8 +344,8 @@ def time_freq(
                             f"early dt       = {dt1:10.0f} ns",
                             f"late dt        = {_dt1:10.0f} ns",
                             f"threshold dt   = {threshold_dt:10.0f} ns",
-                            f"current df     = {df1*1e6:10.4f} ppm",
-                            f"threshold df   = {threshold_df*1e6:10.4f} ppm",
+                            f"current df     = {df1 * 1e6:10.4f} ppm",
+                            f"threshold df   = {threshold_df * 1e6:10.4f} ppm",
                         ]
                     },
                 )
@@ -389,8 +390,8 @@ def time_freq(
                     f"early dt       = {dt1:10.0f} ns",
                     f"late dt        = {_dt1:10.0f} ns",
                     f"accumulated dt = {dt:10.0f} ns",
-                    f"current df     = {df1*1e6:10.4f} ppm",
-                    f"accumulated df = {(f-1)*1e6:10.4f} ppm",
+                    f"current df     = {df1 * 1e6:10.4f} ppm",
+                    f"accumulated df = {(f - 1) * 1e6:10.4f} ppm",
                 ]
             },
         )
@@ -433,8 +434,8 @@ def time_freq(
 
 @profile
 def fpfind(
-    alice: list,
-    bob: list,
+    alice: npt.NDArray[np.number],
+    bob: npt.NDArray[np.number],
     num_wraps: int,
     num_bins: int,
     resolution: float,
@@ -492,7 +493,7 @@ def fpfind(
                 do_frequency_compensation=do_frequency_compensation,
             )
         except ValueError as e:
-            logger.info(f"Peak finding failed, {df0*1e6:7.3f} ppm: {str(e)}")
+            logger.info(f"Peak finding failed, {df0 * 1e6:7.3f} ppm: {str(e)}")
             continue
 
         # Refine estimates, using the same recursive relations
@@ -505,7 +506,7 @@ def fpfind(
             dt=dt,
             df=f - 1,
         )
-        logger.info(f"Peak found, precomp: {df0*1e6:7.3f} ppm: {str(e)}")
+        logger.info(f"Peak found, precomp: {df0 * 1e6:7.3f} ppm: {str(e)}")
         # TODO: Justify the good enough frequency value
         # TODO(2024-01-31): Add looping code to customize refinement steps.
         if precompensation_fullscan:
@@ -786,8 +787,8 @@ def main():
         "Reading timestamps...",
         extra={
             "details": [
-                f"Required duration: {minimum_duration*1e-9:.1f}s "
-                f"(cross-corr {Ta*1e-9:.1f}s)",
+                f"Required duration: {minimum_duration * 1e-9:.1f}s "
+                f"(cross-corr {Ta * 1e-9:.1f}s)",
             ]
         },
     )
@@ -808,7 +809,7 @@ def main():
         first_epoch, available_epochs = get_first_overlapping_epoch(
             args.sendfiles, args.t1files,
             first_epoch=args.first_epoch, return_length=True,
-        )
+        )  # type: ignore
         logger.debug("  ", extra={"details": [
             f"Available: {available_epochs:d} epochs "
             f"(need {required_epochs:d})",
@@ -828,6 +829,7 @@ def main():
     elif args.target is not None and args.reference is not None:
         logger.info("  Reading from timestamp files...")
         _is_reading_ts = True
+        first_epoch = None
 
         # Get only required events
         tas, tae = read_a1_start_end(args.reference, legacy=args.legacy)

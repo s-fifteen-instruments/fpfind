@@ -49,11 +49,6 @@ build-backend = "poetry_dynamic_versioning.backend"
 [tool.pytest.ini_options]
 addopts = "--ignore=tests/freqcd --ignore=tests/parse_epochs --ignore=tests/fpfind"
 
-[tool.pyright]
-include = ["src"]
-typeCheckingMode = "standard"
-pythonVersion = "3.10"
-
 [tool.ruff.lint]
 # Choose from list of rules: <https://docs.astral.sh/ruff/rules/>
 select = [
@@ -79,3 +74,12 @@ ignore = [
     "PLR0915",  # too many statements
     "PLW0603",  # global variables - needs eventual refactoring
 ]
+
+[tool.pyright]
+include = ["src"]
+exclude = [
+    "src/fpfind/lib",
+    "src/fpfind/apps",
+]
+pythonVersion = "3.8"
+typeCheckingMode = "standard"
