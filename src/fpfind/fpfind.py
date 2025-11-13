@@ -42,16 +42,14 @@ from fpfind.lib.constants import (
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
 from fpfind.lib.utils import (
     ArgparseCustomFormatter,
-    generate_fft,
+    _histogram_fft,
     get_first_overlapping_epoch,
     get_statistics,
     get_timestamp_pattern,
     get_timing_delay_fft,
-    get_xcorr,
     normalize_timestamps,
     parse_docstring_description,
     round,
-    slice_timestamps,
 )
 
 logger = get_logger(__name__, human_readable=True)
@@ -210,11 +208,7 @@ def time_freq(
             "      Performing earlier xcorr (range: [0.00, %.2f]s)",
             _duration * 1e-9,
         )
-        ats_early = slice_timestamps(ats, 0, _duration)
-        bts_early = slice_timestamps(bts, 0, _duration)
-        afft = generate_fft(ats_early, num_bins, resolution)
-        bfft = generate_fft(bts_early, num_bins, resolution)
-        ys = get_xcorr(afft, bfft)
+        ys = _histogram_fft(ats, bts, 0, _duration, num_bins, resolution)
 
         # Calculate timing delay
         _dtype = np.int32  # signed number needed for negative delays
@@ -335,11 +329,9 @@ def time_freq(
             if perform_liberal_match and curr_iteration == 1:
                 resolution = _resolution  # reset resolution
 
-            ats_late = slice_timestamps(ats, separation_duration, _duration)
-            bts_late = slice_timestamps(bts, separation_duration, _duration)
-            _afft = generate_fft(ats_late, num_bins, resolution)
-            _bfft = generate_fft(bts_late, num_bins, resolution)
-            _ys = get_xcorr(_afft, _bfft)
+            _ys = _histogram_fft(
+                ats, bts, separation_duration, _duration, num_bins, resolution
+            )
 
             # Calculate timing delay for late set of timestamps
             xs = np.arange(num_bins) * resolution

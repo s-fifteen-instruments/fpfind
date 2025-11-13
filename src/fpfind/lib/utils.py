@@ -538,3 +538,13 @@ def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
 
 # def chopper_timestamp(filename, resolution=TSRES.PS125, legacy=False, full=False):
 #     pass
+
+
+def _histogram_fft(ats, bts, start, duration, num_bins, time_res):
+    """Convenience function that wraps histogram routines."""
+    ats_early = slice_timestamps(ats, start, duration)
+    bts_early = slice_timestamps(bts, start, duration)
+    afft = generate_fft(ats_early, num_bins, time_res)
+    bfft = generate_fft(bts_early, num_bins, time_res)
+    ys = get_xcorr(afft, bfft)
+    return ys
