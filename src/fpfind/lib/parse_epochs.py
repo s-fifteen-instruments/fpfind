@@ -19,10 +19,10 @@ from typing import NamedTuple
 
 import numpy as np
 
+import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT, TSRES
-from fpfind.lib._logging import get_logger
 
-logger = get_logger(__name__, level="warning")
+logger, log = logging.get_logger(__name__)
 
 
 class HeadT1(NamedTuple):

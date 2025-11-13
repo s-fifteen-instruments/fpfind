@@ -1,5 +1,8 @@
 import logging
 import sys
+import traceback
+from types import SimpleNamespace
+
 
 class LoggingOverrideFormatter(logging.Formatter):
     """Supports injection of overrides during logging.
@@ -65,6 +68,7 @@ class LoggingOverrideFormatter(logging.Formatter):
     References:
         [1]: <https://stackoverflow.com/a/71228329>
     """
+
     def __init__(self, *args, human_readable=False, delimiter="| ", **kwargs):
         # For multiline logging
         self.human_readable = human_readable
@@ -74,11 +78,11 @@ class LoggingOverrideFormatter(logging.Formatter):
     def format(self, record):
         # Override attributes with debugging-relevant information
         if hasattr(record, "_funcname"):
-            record.funcName = record._funcname
+            record.funcName = record._funcname  # type: ignore
         if hasattr(record, "_filename"):
-            record.filename = record._filename
+            record.filename = record._filename  # type: ignore
         if hasattr(record, "_lineno"):
-            record.lineno= record._lineno
+            record.lineno = record._lineno  # type: ignore
         message = super().format(record)
 
         # Append additional debugging info
@@ -110,46 +114,64 @@ class LoggingOverrideFormatter(logging.Formatter):
 
         return message
 
-def get_logger(name, level=None, human_readable=False):
+
+def get_logger(name):
     logger = logging.getLogger(name)
+    logger.setLevel(logging.WARNING)  # default logging level
     if not logger.handlers:
         handler = logging.StreamHandler(stream=sys.stderr)
-        handler.setFormatter(
-            LoggingOverrideFormatter(
-                fmt="{asctime}\t{levelname:<7s}\t{funcName}:{lineno}\t| {message}",
-                datefmt="%Y%m%d_%H%M%S",
-                style="{",
-                human_readable=human_readable,
-            )
-        )
+        handler.setFormatter(DEFAULT_FORMATTER)
         logger.addHandler(handler)
         logger.propagate = False
 
-    logger.setLevel(label2level(level))
-    return logger
+    _indentation = 0
 
-def set_logfile(logger, path, human_readable=False):
-    handler = logging.FileHandler(filename=path, mode="w")
-    handler.setFormatter(
-        LoggingOverrideFormatter(
-            fmt="{asctime}\t{levelname:<7s}\t{funcName}:{lineno}\t| {message}",
-            datefmt="%Y%m%d_%H%M%S",
-            style="{",
-            human_readable=human_readable,
-        )
+    def log(n=0):
+        nonlocal _indentation
+        _indentation = n
+        return namespace
+
+    def create_logfunc(f):
+        def logfunc(message, *details):
+            nonlocal _indentation
+            msg = "  " * _indentation + message
+            caller = traceback.extract_stack(limit=2)[0]
+            extras = {
+                "_funcname": caller.name,
+                "_filename": caller.filename,
+                "_lineno": caller.lineno,
+                "details": details,
+            }
+            f(msg, extra=extras)
+            _indentation = 0
+
+        return logfunc
+
+    namespace = SimpleNamespace(
+        debug=create_logfunc(logger.debug),
+        info=create_logfunc(logger.info),
+        warning=create_logfunc(logger.warning),
+        error=create_logfunc(logger.error),
     )
+
+    return logger, log
+
+
+def set_logfile(logger, path):
+    handler = logging.FileHandler(filename=path, mode="w")
+    handler.setFormatter(DEFAULT_FORMATTER)
     logger.addHandler(handler)
 
-def verbosity2level(verbosity):
-    levels = [logging.WARNING, logging.INFO, logging.DEBUG]
-    verbosity = min(verbosity, len(levels)-1)
-    return levels[verbosity]
 
-def label2level(label):
-    LOG_LEVELS = {
-        "debug": logging.DEBUG,
-        "info": logging.INFO,
-        "warning": logging.WARNING,
-        "error": logging.ERROR,
-    }
-    return LOG_LEVELS.get(label, logging.WARNING)
+def set_verbosity(logger, verbosity):
+    levels = [logging.WARNING, logging.INFO, logging.DEBUG]
+    verbosity = min(verbosity, len(levels) - 1)
+    logger.setLevel(levels[verbosity])
+
+
+DEFAULT_FORMATTER = LoggingOverrideFormatter(
+    fmt="{asctime}\t{levelname:<7s}\t{funcName}:{lineno}\t| {message}",
+    datefmt="%Y%m%d_%H%M%S",
+    style="{",
+    human_readable=True,
+)
