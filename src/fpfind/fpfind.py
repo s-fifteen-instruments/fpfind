@@ -105,6 +105,12 @@ def time_freq(
         threshold: Height of peak to discriminate as signal, in units of dev.
         separation_duration: Separation of cross-correlations, in units of ns.
     """
+    # Optional new behaviour where the significance evaluation is deferred,
+    # instead looking for coincidences in timing differences
+    perform_liberal_match = threshold == 0
+    _resolution = resolution  # cached
+    __resolution = resolution
+
     end_time = min(ats[-1], bts[-1])
     duration = num_wraps * resolution * num_bins
     log(1).debug("Performing peak searching...")
@@ -122,6 +128,9 @@ def time_freq(
     curr_iteration = 1
 
     while True:
+        if perform_liberal_match:
+            resolution = __resolution
+
         # Dynamically adjust 'num_wraps' based on current 'resolution',
         # avoids event overflow/underflow.
         #
@@ -149,16 +158,13 @@ def time_freq(
         _dtype = np.int32  # signed number needed for negative delays
         if num_bins * resolution > 2147483647:  # int32 max
             _dtype = np.int64
-        _resolution = resolution
+
         xs = np.arange(num_bins, dtype=_dtype) * resolution
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
         sig = get_statistics(ys, resolution).significance
 
-        # Optional new behaviour where the significance evaluation is deferred,
-        # instead looking for coincidences in timing differences
-        perform_liberal_match = threshold == 0
         dt1s_early = []
-        while curr_iteration == 1:
+        while perform_liberal_match or curr_iteration == 1:
             log(4).debug(
                 f"Peak: S = {sig:.3f}, dt = {dt1}ns (resolution = {resolution:.0f}ns)",
             )
@@ -218,7 +224,9 @@ def time_freq(
         # show up at all. A peak is likely to have already been found, if
         # the current iteration is more than 1. Attempt to retry with
         # larger 'num_wraps' if enabled in settings.
-        if curr_iteration != 1 and abs(dt1) > threshold_dt:
+        if not perform_liberal_match and (
+            curr_iteration != 1 and abs(dt1) > threshold_dt
+        ):
             log(3).warning(
                 "Interrupted due spurious signal:",
                 f"early dt       = {dt1:10.0f} ns",
@@ -232,7 +240,10 @@ def time_freq(
                 continue
 
         # Catch if timing delay exceeded
-        if (curr_iteration == 1 and len(dt1s_early) == 0) or abs(dt1) > max_dt:
+        if (perform_liberal_match and len(dt1s_early) == 0) or (
+            not perform_liberal_match and abs(dt1) > max_dt
+        ):
+            print("YO:")
             raise PeakFindingFailed(
                 "Time delay OOB  ",
                 significance=sig,
@@ -249,8 +260,8 @@ def time_freq(
             log(3).debug(
                 f"Performing later xcorr (range: [{separation_duration * 1e-9:.2f}, {(separation_duration + _duration) * 1e-9:.2f}]s)",
             )
-            if perform_liberal_match and curr_iteration == 1:
-                resolution = _resolution  # reset resolution
+            if perform_liberal_match:
+                resolution = __resolution  # reset resolution
 
             _ys = _histogram_fft(
                 ats, bts, separation_duration, _duration, num_bins, resolution
@@ -263,12 +274,9 @@ def time_freq(
 
             # Attempt similar search for late timing difference
             dt1s_late = []
-            while perform_liberal_match and curr_iteration == 1:
-                logger.debug(
-                    "        Peak: S = %.3f, dt = %sns (resolution = %.0fns)",
-                    sig,
-                    _dt1,
-                    resolution,
+            while perform_liberal_match:
+                log(4).debug(
+                    f"Peak: S = {sig:.3f}, dt = {_dt1}ns (resolution = {resolution:.0f}ns)",
                 )
                 if abs(_dt1) < max_dt:
                     dt1s_late.append((_dt1, resolution, sig))
@@ -279,6 +287,7 @@ def time_freq(
                 # Check intersections here
                 if resolution > 1e5:
                     if len(dt1s_late) == 0:
+                        print("BOO")
                         raise PeakFindingFailed(
                             "Time delay OOB  ",
                             significance=sig,
@@ -287,45 +296,50 @@ def time_freq(
                         )
 
                     ddt_window = separation_duration * max_df * 1e9
-                    dt1s_early = sorted(dt1s_early)
-                    dt1s_late = sorted(dt1s_late)
+                    if curr_iteration == 1:
+                        dt1s_early = sorted(dt1s_early)
+                        dt1s_late = sorted(dt1s_late)
 
-                    i = j = 0  # two-pointer method
-                    best = (None, (0, 0, 0), (0, 0, 0))  # min_ddt, early, late
-                    while i < len(dt1s_early) and j < len(dt1s_late):
-                        dt1_early = dt1s_early[i]
-                        dt1_late = dt1s_late[j]
-                        ddt = abs(dt1_early[0] - dt1_late[0])
-                        if best[0] is None or (ddt < best[0] and ddt < ddt_window):
-                            best = (ddt, dt1_early, dt1_late)
+                        i = j = 0  # two-pointer method
+                        best = (None, (0, 0, 0), (0, 0, 0))  # min_ddt, early, late
+                        while i < len(dt1s_early) and j < len(dt1s_late):
+                            dt1_early = dt1s_early[i]
+                            dt1_late = dt1s_late[j]
+                            ddt = abs(dt1_early[0] - dt1_late[0])
+                            if best[0] is None or (ddt < best[0] and ddt < ddt_window):
+                                best = (ddt, dt1_early, dt1_late)
 
-                        if dt1_early[0] < dt1_late[0]:
-                            i += 1
-                        else:
-                            j += 1
+                            if dt1_early[0] < dt1_late[0]:
+                                i += 1
+                            else:
+                                j += 1
 
-                    if best[0] is None:
-                        raise PeakFindingFailed(
-                            "No coincident dt",
-                            significance=sig,
-                            resolution=resolution,
-                            dt1=dt1,
-                        )
+                        if best[0] is None:
+                            raise PeakFindingFailed(
+                                "No coincident dt",
+                                significance=sig,
+                                resolution=resolution,
+                                dt1=dt1,
+                            )
 
-                    # Valid point found
-                    # Approximate the resolvable resolution by finding the
-                    # time differences found using the smallest resolution
-                    def resolve(best_pt, pts) -> Tuple[int, int, float]:
-                        left = best_pt[0] - best_pt[1]
-                        right = best_pt[0] + best_pt[1]
-                        assert len(pts) > 0
-                        for pt in pts:
-                            if left <= pt[0] <= right:
-                                break
-                        return pt  # pyright: ignore[reportPossiblyUnboundVariable]
+                        # Valid point found
+                        # Approximate the resolvable resolution by finding the
+                        # time differences found using the smallest resolution
+                        def resolve(best_pt, pts) -> Tuple[int, int, float]:
+                            left = best_pt[0] - best_pt[1]
+                            right = best_pt[0] + best_pt[1]
+                            assert len(pts) > 0
+                            for pt in pts:
+                                if left <= pt[0] <= right:
+                                    break
+                            return pt  # pyright: ignore[reportPossiblyUnboundVariable]
 
-                    dt1_early = resolve(best[1], dt1s_early)
-                    dt1_late = resolve(best[2], dt1s_late)
+                        dt1_early = resolve(best[1], dt1s_early)
+                        dt1_late = resolve(best[2], dt1s_late)
+
+                    else:
+                        dt1_early = sorted(dt1s_early, key=lambda p: p[2])[-1]
+                        dt1_late = sorted(dt1s_late, key=lambda p: p[2])[-1]
 
                     # Pass control back with expected variables
                     resolution = min([dt1_early[1], dt1_late[1]])
@@ -343,8 +357,10 @@ def time_freq(
             # Some guard rails to make sure results make sense
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
-            if curr_iteration != 1 and (
-                abs(_dt1) > threshold_dt or abs(df1) > threshold_df
+            if (
+                not perform_liberal_match
+                and curr_iteration != 1
+                and (abs(_dt1) > threshold_dt or abs(df1) > threshold_df)
             ):
                 log(3).warning(
                     "Interrupted due spurious signal:",
@@ -365,6 +381,7 @@ def time_freq(
 
             # Catch if timing delay exceeded
             if abs(_dt1) > max_dt:
+                print("BLEH")
                 raise PeakFindingFailed(
                     "Time delay OOB  ",
                     significance=sig,
@@ -426,6 +443,10 @@ def time_freq(
         resolution /= separation_duration / duration / RES_REFINE_FACTOR
         resolution = max(resolution, target_resolution)
         curr_iteration += 1
+        if resolution <= _resolution:
+            perform_liberal_match = True
+        if perform_liberal_match:
+            __resolution = resolution / 2
 
     df = f - 1
     log(3).debug("Returning results.")
@@ -795,7 +816,7 @@ def main():
     num_bins = 1 << args.buffer_order
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
-    minimum_duration = (args.separation + 2) * Ta
+    minimum_duration = (args.separation + 2) * Ta * 10
     log(0).debug(
         "Reading timestamps...",
         f"Required duration: {minimum_duration * 1e-9:.1f}s "
