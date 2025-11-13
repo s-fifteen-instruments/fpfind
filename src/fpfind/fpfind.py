@@ -20,11 +20,7 @@ Changelog:
     2023-01-31, Justin: Formalize interface for fpfind.py
 """
 
-import functools
-import inspect
-import os
 import sys
-import time
 from pathlib import Path
 
 import configargparse
@@ -76,61 +72,8 @@ RES_REFINE_FACTOR = np.sqrt(2)
 # Set lower limit to frequency compensation before disabling
 TARGET_DF = 1e-10
 
-PROFILE_LEVEL = 0
-
-
-def profile(f):
-    """Performs a simple timing profile.
-
-    Modifies the logging facility to log the name and lineno of the function
-    being called, instead of the usual encapsulating function.
-
-    Possibly thread-safe, but may not yield the correct indentation levels
-    during execution, in that situation.
-    """
-
-    # Allows actual function to be logged rather than wrapped
-    caller = inspect.getframeinfo(inspect.stack()[1][0])
-    extras = {
-        "_funcname": f"[{f.__name__}]",
-        "_filename": os.path.basename(caller.filename),
-        # "_lineno": caller.lineno,  # this returns the @profile lineno instead
-    }
-
-    @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        global PROFILE_LEVEL
-        pad = "  " * PROFILE_LEVEL
-        logger.debug(
-            "%sSTART PROFILING",
-            pad,
-            stacklevel=2,
-            extra=extras,
-        )
-        PROFILE_LEVEL += 1
-
-        start = time.time()
-        try:
-            result = f(*args, **kwargs)
-        finally:
-            end = time.time()
-            elapsed = end - start
-            logger.debug(
-                "%sEND PROFILING: %.0f s",
-                pad,
-                elapsed,
-                stacklevel=2,
-                extra=extras,
-            )
-            PROFILE_LEVEL -= 1
-
-        return result
-
-    return wrapper
-
 
 # Main algorithm
-@profile
 def time_freq(
     ats: npt.NDArray[np.number],
     bts: npt.NDArray[np.number],
@@ -424,7 +367,6 @@ def time_freq(
     return dt, df
 
 
-@profile
 def fpfind(
     alice: npt.NDArray[np.number],
     bob: npt.NDArray[np.number],
