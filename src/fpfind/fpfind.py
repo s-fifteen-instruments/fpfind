@@ -27,6 +27,7 @@ from typing import Tuple
 import configargparse
 import numpy as np
 import numpy.typing as npt
+from typing_extensions import TypeAlias
 
 import fpfind.lib._logging as logging
 from fpfind.lib.constants import (
@@ -38,17 +39,18 @@ from fpfind.lib.constants import (
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
 from fpfind.lib.utils import (
     ArgparseCustomFormatter,
-    _histogram_fft,
+    fold_histogram,
     get_first_overlapping_epoch,
     get_statistics,
     get_timestamp_pattern,
     get_timing_delay_fft,
+    histogram_fft3,
     normalize_timestamps,
     parse_docstring_description,
     round,
 )
 
-logger, log = logging.get_logger(__name__)
+logger, log = logging.get_logger("fpfind")
 
 # Allows quick prototyping by interrupting execution right before FFT
 # Trigger by running 'python3 -i -m fpfind.fpfind --config ... --experiment'.
@@ -73,19 +75,23 @@ RES_REFINE_FACTOR = np.sqrt(2)
 # Set lower limit to frequency compensation before disabling
 TARGET_DF = 1e-10
 
+# Type aliases
+NDArrayFloat: TypeAlias = npt.NDArray[np.floating]
+NDArrayNumber: TypeAlias = npt.NDArray[np.number]
+
 
 # Main algorithm
 def time_freq(
-    ats: npt.NDArray[np.number],
-    bts: npt.NDArray[np.number],
-    num_wraps: int,
-    num_bins: int,
-    resolution: float,
-    target_resolution: float,
-    threshold: float,
+    ats: NDArrayNumber,
+    bts: NDArrayNumber,
+    k0: int,
+    N: int,
+    r0: float,
+    r_target: float,
+    S0: float,
     max_dt: float,
     max_df: float,
-    separation_duration: float,
+    Ts: float,
     quick: bool,
     do_frequency_compensation: bool = True,
 ):
@@ -95,78 +101,65 @@ def time_freq(
     this starting time is also common reference between 'ats' and 'bts' is up to
     implementation.
 
+    Note some differences with original implementation: the 'separation_duration'
+    is left constant.
+
     Args:
         ats: Timestamps of reference side, in units of ns.
         bts: Timestamps of compensating side, in units of ns.
-        num_wraps: Number of cross-correlations to overlay, usually 1.
-        num_bins: Numbers of bins to use in the FFT.
-        resolution: Initial resolution of cross-correlation.
-        target_resolution: Target resolution desired from routine.
-        threshold: Height of peak to discriminate as signal, in units of dev.
-        separation_duration: Separation of cross-correlations, in units of ns.
+        k0: Number of cross-correlations to overlay, usually 1.
+        N: Numbers of bins to use in the FFT.
+        r0: Initial resolution of cross-correlation.
+        r_target: Target resolution desired from routine.
+        S0: Height of peak to discriminate as signal, in units of dev.
+        Ts: Separation of cross-correlations, in units of ns.
     """
     # Optional new behaviour where the significance evaluation is deferred,
     # instead looking for coincidences in timing differences
-    perform_liberal_match = threshold == 0
-    _resolution = resolution  # cached
-    __resolution = resolution
+    perform_liberal_match = S0 == 0
+    r = r0
+    k = k0
+    Ta = r0 * N * k0
+    _resolution = r0  # cached
+    __resolution = r0
 
-    end_time = min(ats[-1], bts[-1])
-    duration = num_wraps * resolution * num_bins
     log(1).debug("Performing peak searching...")
     log(2).debug(
         "Parameters:",
-        f"Bins: 2^{np.int32(np.log2(num_bins)):d}",
-        f"Bin width: {resolution:.0f}ns",
-        f"Number of wraps: {num_wraps:d}",
-        f"Target resolution: {target_resolution}ns",
+        f"Bins: 2^{np.int32(np.log2(N)):d}",
+        f"Bin width: {r0:.0f}ns",
+        f"Number of wraps: {k0:d}",
+        f"Target resolution: {r_target}ns",
     )
 
     # Refinement loop, note resolution/duration will change during loop
     dt = 0
     f = 1
-    curr_iteration = 1
+    i = 1
 
     while True:
         if perform_liberal_match:
-            resolution = __resolution
-
-        # Dynamically adjust 'num_wraps' based on current 'resolution',
-        # avoids event overflow/underflow.
-        #
-        # Previous implementation tried to use as many events as possible
-        # This became a problem when fine-tuning the timing resolution, due
-        # to the presence of multiple peaks under a clock skew, which will now
-        # be resolvable. Instead, it is sufficient to force the same 'num_wraps'.
-        #
-        # TODO(2024-02-14): Account for the separation time when calculating
-        #                   'max_wraps'.
-        max_wraps = np.floor(end_time / (resolution * num_bins))
-        _num_wraps = min(num_wraps, max(max_wraps, 1))  # bounded by 1 <= k <= k_max
-        _duration = _num_wraps * resolution * num_bins
-        log(2).debug(
-            f"Iteration {curr_iteration} (r={resolution:.1f}ns, k={_num_wraps:d})",
-        )
+            r = __resolution
+        # Dynamically adjust 'k' to avoid event over- and under-flow
+        k_max = np.floor(Ta / (r * N))
+        k_act = min(k, max(k_max, 1))  # required because 'k_max' may < 1
+        Ta_act = k_act * r * N
+        Ta_act = min(Ta_act, Ta)
+        log(2).debug(f"Iteration {i} (r={r:.1f}ns, k={k_act:d})")
 
         # Perform cross-correlation
-        log(3).debug(
-            f"Performing earlier xcorr (range: [0.00, {_duration * 1e-9:.2f}]s)",
-        )
-        ys = _histogram_fft(ats, bts, 0, _duration, num_bins, resolution)
+        log(3).debug(f"Performing earlier xcorr (range: [0.00, {Ta_act * 1e-9:.2f}]s)")
+        xs, ys = histogram_fft3(ats, bts, 0, Ta_act, N, r, Ta)
 
         # Calculate timing delay
-        _dtype = np.int32  # signed number needed for negative delays
-        if num_bins * resolution > 2147483647:  # int32 max
-            _dtype = np.int64
-
-        xs = np.arange(num_bins, dtype=_dtype) * resolution
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
-        sig = get_statistics(ys, resolution).significance
+        sig = get_statistics(ys, r).significance
 
+        # Dynamic search for resolution
         dt1s_early = []
-        while perform_liberal_match or curr_iteration == 1:
+        while perform_liberal_match or i == 1:
             log(4).debug(
-                f"Peak: S = {sig:.3f}, dt = {dt1}ns (resolution = {resolution:.0f}ns)",
+                f"Peak: S = {sig:.3f}, dt = {dt1}ns (resolution = {r:.0f}ns)",
             )
 
             # Deviation zero, due flat cross-correlation
@@ -175,45 +168,46 @@ def time_freq(
                 raise PeakFindingFailed(
                     "Bin saturation  ",
                     significance=sig,
-                    resolution=resolution,
+                    resolution=r,
                     dt1=dt1,
                 )
 
             if abs(dt1) < max_dt:
-                dt1s_early.append((dt1, resolution, sig))
+                dt1s_early.append((dt1, r, sig))
 
             # Check if peak threshold exceeded
-            if sig >= threshold and not perform_liberal_match:
+            if not perform_liberal_match and sig >= S0:
                 log(5).debug("Accepted")
                 break
 
             if not perform_liberal_match:
                 log(5).debug("Rejected")
+
             if _DISABLE_DOUBLING:
                 raise PeakFindingFailed(
                     "Low significance",
                     significance=sig,
-                    resolution=resolution,
+                    resolution=r,
                     dt1=dt1,
                 )
-            ys = np.sum(ys.reshape(-1, 2), axis=1)
-            resolution *= 2
+
+            # If peak rejected, merge contiguous bins to double
+            # the resolution of the peak search
+            xs, ys = fold_histogram(xs, ys, 2)
+            r *= 2
+            dt1 = get_timing_delay_fft(ys, xs)[0]
+            sig = get_statistics(ys, r).significance
 
             # Catch runaway resolution doubling, limited by
-            if resolution > 1e5:
+            if r > 1e4:
                 if perform_liberal_match:
                     break
                 raise PeakFindingFailed(
                     "Resolution OOB  ",
                     significance=sig,
-                    resolution=resolution,
+                    resolution=r,
                     dt1=dt1,
                 )
-
-            # Recalculate timing delay since resolution changed
-            xs = np.arange(len(ys)) * resolution
-            dt1 = get_timing_delay_fft(ys, xs)[0]
-            sig = get_statistics(ys, resolution).significance
 
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
@@ -224,18 +218,16 @@ def time_freq(
         # show up at all. A peak is likely to have already been found, if
         # the current iteration is more than 1. Attempt to retry with
         # larger 'num_wraps' if enabled in settings.
-        if not perform_liberal_match and (
-            curr_iteration != 1 and abs(dt1) > threshold_dt
-        ):
+        if not perform_liberal_match and (i != 1 and abs(dt1) > threshold_dt):
             log(3).warning(
                 "Interrupted due spurious signal:",
                 f"early dt       = {dt1:10.0f} ns",
                 f"threshold dt   = {threshold_dt:10.0f} ns",
             )
-            if num_wraps < _NUM_WRAPS_LIMIT:
-                num_wraps += 1
+            if k < _NUM_WRAPS_LIMIT:
+                k += 1
                 log(3).debug(
-                    f"Reattempting with k = {num_wraps:d} due missing peak.",
+                    f"Reattempting with k = {k:d} due missing peak.",
                 )
                 continue
 
@@ -247,56 +239,50 @@ def time_freq(
             raise PeakFindingFailed(
                 "Time delay OOB  ",
                 significance=sig,
-                resolution=resolution,
+                resolution=r,
                 dt1=dt1,
             )
 
         _dt1 = dt1
         df1 = 0  # default values
         if do_frequency_compensation:
-            # TODO(2024-01-31):
-            #     If signal too low, spurious peaks may occur. Implement
-            #     a mechanism to retry to obtain an alternative value.
             log(3).debug(
-                f"Performing later xcorr (range: [{separation_duration * 1e-9:.2f}, {(separation_duration + _duration) * 1e-9:.2f}]s)",
+                f"Performing later xcorr (range: [{Ts * 1e-9:.2f}, {(Ts + Ta_act) * 1e-9:.2f}]s)",
             )
             if perform_liberal_match:
-                resolution = __resolution  # reset resolution
+                r = __resolution  # reset resolution
 
-            _ys = _histogram_fft(
-                ats, bts, separation_duration, _duration, num_bins, resolution
-            )
+            xs, _ys = histogram_fft3(ats, bts, Ts, Ta_act, N, r, Ta)
 
             # Calculate timing delay for late set of timestamps
-            xs = np.arange(num_bins) * resolution
             _dt1 = get_timing_delay_fft(_ys, xs)[0]
-            sig = get_statistics(_ys, resolution).significance
+            sig = get_statistics(_ys, r).significance
 
             # Attempt similar search for late timing difference
             dt1s_late = []
             while perform_liberal_match:
                 log(4).debug(
-                    f"Peak: S = {sig:.3f}, dt = {_dt1}ns (resolution = {resolution:.0f}ns)",
+                    f"Peak: S = {sig:.3f}, dt = {_dt1}ns (resolution = {r:.0f}ns)",
                 )
                 if abs(_dt1) < max_dt:
-                    dt1s_late.append((_dt1, resolution, sig))
+                    dt1s_late.append((_dt1, r, sig))
 
                 _ys = np.sum(_ys.reshape(-1, 2), axis=1)
-                resolution *= 2
+                r *= 2
 
                 # Check intersections here
-                if resolution > 1e5:
+                if r > 1e5:
                     if len(dt1s_late) == 0:
                         print("BOO")
                         raise PeakFindingFailed(
                             "Time delay OOB  ",
                             significance=sig,
-                            resolution=resolution,
+                            resolution=r,
                             dt1=dt1,
                         )
 
-                    ddt_window = separation_duration * max_df * 1e9
-                    if curr_iteration == 1:
+                    ddt_window = Ts * max_df * 1e9
+                    if i == 1:
                         dt1s_early = sorted(dt1s_early)
                         dt1s_late = sorted(dt1s_late)
 
@@ -318,7 +304,7 @@ def time_freq(
                             raise PeakFindingFailed(
                                 "No coincident dt",
                                 significance=sig,
-                                resolution=resolution,
+                                resolution=r,
                                 dt1=dt1,
                             )
 
@@ -342,24 +328,24 @@ def time_freq(
                         dt1_late = sorted(dt1s_late, key=lambda p: p[2])[-1]
 
                     # Pass control back with expected variables
-                    resolution = min([dt1_early[1], dt1_late[1]])
+                    r = min([dt1_early[1], dt1_late[1]])
                     dt1 = dt1_early[0]
                     _dt1 = dt1_late[0]
                     break
 
-                xs = np.arange(len(_ys)) * resolution
+                xs = np.arange(len(_ys)) * r
                 _dt1 = get_timing_delay_fft(_ys, xs)[0]
-                sig = get_statistics(_ys, resolution).significance
+                sig = get_statistics(_ys, r).significance
 
             # Evaluate measured frequency difference
-            df1 = (_dt1 - dt1) / separation_duration
+            df1 = (_dt1 - dt1) / Ts
 
             # Some guard rails to make sure results make sense
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
             if (
                 not perform_liberal_match
-                and curr_iteration != 1
+                and i != 1
                 and (abs(_dt1) > threshold_dt or abs(df1) > threshold_df)
             ):
                 log(3).warning(
@@ -370,10 +356,10 @@ def time_freq(
                     f"current df     = {df1 * 1e6:10.4f} ppm",
                     f"threshold df   = {threshold_df * 1e6:10.4f} ppm",
                 )
-                if num_wraps < _NUM_WRAPS_LIMIT:
-                    num_wraps += 1
+                if k < _NUM_WRAPS_LIMIT:
+                    k += 1
                     log(3).debug(
-                        f"Reattempting with k = {num_wraps:d} due missing peak.",
+                        f"Reattempting with k = {k:d} due missing peak.",
                     )
                     continue
 
@@ -385,7 +371,7 @@ def time_freq(
                 raise PeakFindingFailed(
                     "Time delay OOB  ",
                     significance=sig,
-                    resolution=resolution,
+                    resolution=r,
                     dt1=_dt1,
                 )
 
@@ -418,7 +404,7 @@ def time_freq(
             raise PeakFindingFailed(
                 "Compensation OOB",
                 significance=sig,
-                resolution=resolution,
+                resolution=r,
                 dt1=dt1,
                 dt2=_dt1,
                 dt=dt,
@@ -426,7 +412,7 @@ def time_freq(
             )
 
         # Stop if resolution met, otherwise refine resolution
-        if resolution == target_resolution:
+        if r == r_target:
             break
 
         # Terminate immediately if 'quick' results desired
@@ -440,13 +426,13 @@ def time_freq(
 
         # Update for next iteration
         bts = (bts - dt1) / (1 + df1)
-        resolution /= separation_duration / duration / RES_REFINE_FACTOR
-        resolution = max(resolution, target_resolution)
-        curr_iteration += 1
-        if resolution <= _resolution:
+        r /= Ts / Ta / RES_REFINE_FACTOR
+        r = max(r, r_target)
+        i += 1
+        if r <= _resolution:
             perform_liberal_match = True
         if perform_liberal_match:
-            __resolution = resolution / 2
+            __resolution = r / 2
 
     df = f - 1
     log(3).debug("Returning results.")
@@ -454,8 +440,8 @@ def time_freq(
 
 
 def fpfind(
-    alice: npt.NDArray[np.number],
-    bob: npt.NDArray[np.number],
+    alice: NDArrayNumber,
+    bob: NDArrayNumber,
     num_wraps: int,
     num_bins: int,
     resolution: float,
@@ -816,7 +802,7 @@ def main():
     num_bins = 1 << args.buffer_order
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
-    minimum_duration = (args.separation + 2) * Ta * 10
+    minimum_duration = (args.separation + 2) * Ta  # TODO: Check if this should be 1
     log(0).debug(
         "Reading timestamps...",
         f"Required duration: {minimum_duration * 1e-9:.1f}s "

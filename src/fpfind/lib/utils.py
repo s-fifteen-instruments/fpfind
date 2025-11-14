@@ -1,4 +1,5 @@
 import argparse
+import enum
 import pathlib
 import re
 import typing
@@ -10,6 +11,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy
 
+import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT
 from fpfind.lib.constants import TSRES
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
@@ -20,6 +22,8 @@ try:
     from S15lib.g2lib.g2lib import histogram  # noqa: F401
 except ModuleNotFoundError:
     pass
+
+logger, log = logging.get_logger("fpfind")
 
 inbuilt_round = round
 
@@ -540,11 +544,68 @@ def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
 #     pass
 
 
-def _histogram_fft(ats, bts, start, duration, num_bins, time_res):
+def histogram_fft2(
+    ats,
+    bts,
+    start,
+    duration,
+    N,
+    r,
+):
     """Convenience function that wraps histogram routines."""
     ats_early = slice_timestamps(ats, start, duration)
     bts_early = slice_timestamps(bts, start, duration)
-    afft = generate_fft(ats_early, num_bins, time_res)
-    bfft = generate_fft(bts_early, num_bins, time_res)
+    afft = generate_fft(ats_early, N, r)
+    bfft = generate_fft(bts_early, N, r)
     ys = get_xcorr(afft, bfft)
-    return ys
+
+    _dtype = np.int32  # signed number needed for negative delays
+    if N * r > 2147483647:  # int32 max
+        _dtype = np.int64
+    xs = np.arange(N, dtype=_dtype) * r
+    return xs, ys
+
+
+def fold_histogram(xs, ys, binning_factor=2):
+    xs = xs[::binning_factor]
+    ys = np.sum(ys.reshape(-1, binning_factor), axis=1)
+    return xs, ys
+
+
+class CoarseHistogramStrategy(enum.Enum):
+    RESOLUTION = enum.auto()
+    BINS = enum.auto()
+
+
+def histogram_fft3(
+    ats,
+    bts,
+    start,
+    duration,
+    num_bins,
+    resolution,
+    max_duration,
+    strategy: CoarseHistogramStrategy = CoarseHistogramStrategy.RESOLUTION,
+):
+    """Histogram with max duration limit."""
+    ceil = lambda v: int(np.ceil(v))  # noqa: E731 (using lambda cleaner)
+    factor = ceil(resolution * num_bins / max_duration)
+    factor = 1 << ceil(np.log2(factor))  # better equal to 2^k for FFT/reshape
+    duration = min(duration, max_duration)
+
+    if factor == 1:
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+
+    elif strategy is CoarseHistogramStrategy.RESOLUTION:
+        resolution = resolution / factor
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+        xs, ys = fold_histogram(xs, ys, factor)
+
+    elif strategy is CoarseHistogramStrategy.BINS:
+        num_bins = int(num_bins // factor)
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+
+    else:
+        raise NotImplementedError
+
+    return xs, ys
