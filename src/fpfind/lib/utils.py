@@ -10,6 +10,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy
 
+import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT
 from fpfind.lib.constants import TSRES
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
@@ -20,6 +21,8 @@ try:
     from S15lib.g2lib.g2lib import histogram  # noqa: F401
 except ModuleNotFoundError:
     pass
+
+logger, log = logging.get_logger("fpfind")
 
 inbuilt_round = round
 
@@ -540,11 +543,29 @@ def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
 #     pass
 
 
-def _histogram_fft(ats, bts, start, duration, num_bins, time_res):
+def histogram_fft2(
+    ats,
+    bts,
+    start,
+    duration,
+    N,
+    r,
+):
     """Convenience function that wraps histogram routines."""
     ats_early = slice_timestamps(ats, start, duration)
     bts_early = slice_timestamps(bts, start, duration)
-    afft = generate_fft(ats_early, num_bins, time_res)
-    bfft = generate_fft(bts_early, num_bins, time_res)
+    afft = generate_fft(ats_early, N, r)
+    bfft = generate_fft(bts_early, N, r)
     ys = get_xcorr(afft, bfft)
-    return ys
+
+    _dtype = np.int32  # signed number needed for negative delays
+    if N * r > 2147483647:  # int32 max
+        _dtype = np.int64
+    xs = np.arange(N, dtype=_dtype) * r
+    return xs, ys
+
+
+def fold_histogram(xs, ys, binning_factor=2):
+    xs = xs[::binning_factor]
+    ys = np.sum(ys.reshape(-1, binning_factor), axis=1)
+    return xs, ys
