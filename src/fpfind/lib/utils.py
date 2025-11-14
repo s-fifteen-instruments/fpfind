@@ -1,4 +1,5 @@
 import argparse
+import enum
 import pathlib
 import re
 import typing
@@ -568,4 +569,43 @@ def histogram_fft2(
 def fold_histogram(xs, ys, binning_factor=2):
     xs = xs[::binning_factor]
     ys = np.sum(ys.reshape(-1, binning_factor), axis=1)
+    return xs, ys
+
+
+class CoarseHistogramStrategy(enum.Enum):
+    RESOLUTION = enum.auto()
+    BINS = enum.auto()
+
+
+def histogram_fft3(
+    ats,
+    bts,
+    start,
+    duration,
+    num_bins,
+    resolution,
+    max_duration,
+    strategy: CoarseHistogramStrategy = CoarseHistogramStrategy.RESOLUTION,
+):
+    """Histogram with max duration limit."""
+    ceil = lambda v: int(np.ceil(v))  # noqa: E731 (using lambda cleaner)
+    factor = ceil(resolution * num_bins / max_duration)
+    factor = 1 << ceil(np.log2(factor))  # better equal to 2^k for FFT/reshape
+    duration = min(duration, max_duration)
+
+    if factor == 1:
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+
+    elif strategy is CoarseHistogramStrategy.RESOLUTION:
+        resolution = resolution / factor
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+        xs, ys = fold_histogram(xs, ys, factor)
+
+    elif strategy is CoarseHistogramStrategy.BINS:
+        num_bins = int(num_bins // factor)
+        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+
+    else:
+        raise NotImplementedError
+
     return xs, ys

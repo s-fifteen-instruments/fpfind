@@ -41,7 +41,7 @@ from fpfind.lib.utils import (
     get_statistics,
     get_timestamp_pattern,
     get_timing_delay_fft,
-    histogram_fft2,
+    histogram_fft3,
     normalize_timestamps,
     parse_docstring_description,
     round,
@@ -128,11 +128,12 @@ def time_freq(
         k_max = np.floor(Ta / (r * N))
         k_act = min(k, max(k_max, 1))  # required because 'k_max' may < 1
         Ta_act = k_act * r * N
+        Ta_act = min(Ta_act, Ta)
         log(2).debug(f"Iteration {i} (r={r:.1f}ns, k={k_act:d})")
 
         # Perform cross-correlation
         log(3).debug(f"Performing earlier xcorr (range: [0.00, {Ta_act * 1e-9:.2f}]s)")
-        xs, ys = histogram_fft2(ats, bts, 0, Ta_act, N, r)
+        xs, ys = histogram_fft3(ats, bts, 0, Ta_act, N, r, Ta)
 
         # Calculate timing delay
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
@@ -220,7 +221,7 @@ def time_freq(
             log(3).debug(
                 f"Performing later xcorr (range: [{Ts * 1e-9:.2f}, {(Ts + Ta_act) * 1e-9:.2f}]s)",
             )
-            xs, _ys = histogram_fft2(ats, bts, Ts, Ta_act, N, r)
+            xs, _ys = histogram_fft3(ats, bts, Ts, Ta_act, N, r, Ta)
 
             # Calculate timing delay for late set of timestamps
             _dt1 = get_timing_delay_fft(_ys, xs)[0]
@@ -669,7 +670,7 @@ def main():
     num_bins = 1 << args.buffer_order
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
-    minimum_duration = (args.separation + 2) * Ta
+    minimum_duration = (args.separation + 2) * Ta  # TODO: Check if this should be 1
     log(0).debug(
         "Reading timestamps...",
         f"Required duration: {minimum_duration * 1e-9:.1f}s "
