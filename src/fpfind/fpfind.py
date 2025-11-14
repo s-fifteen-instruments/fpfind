@@ -25,6 +25,8 @@ from pathlib import Path
 
 import configargparse
 import numpy as np
+import numpy.typing as npt
+from typing_extensions import TypeAlias
 
 import fpfind.lib._logging as logging
 from fpfind.lib.constants import (
@@ -72,11 +74,15 @@ RES_REFINE_FACTOR = np.sqrt(2)
 # Set lower limit to frequency compensation before disabling
 TARGET_DF = 1e-10
 
+# Type aliases
+NDArrayFloat: TypeAlias = npt.NDArray[np.floating]
+NDArrayNumber: TypeAlias = npt.NDArray[np.number]
+
 
 # Main algorithm
 def time_freq(
-    ats,
-    bts,
+    ats: NDArrayNumber,
+    bts: NDArrayNumber,
     k0: int,
     N: int,
     r0: float,
@@ -318,8 +324,8 @@ def time_freq(
 
 
 def fpfind(
-    alice,
-    bob,
+    alice: NDArrayNumber,
+    bob: NDArrayNumber,
     num_wraps: int,
     num_bins: int,
     resolution: float,
