@@ -13,7 +13,7 @@ import scipy
 
 import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT
-from fpfind.lib.constants import TSRES
+from fpfind.lib.constants import TSRES, PeakFindingFailed
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp
 
@@ -609,3 +609,51 @@ def histogram_fft3(
         raise NotImplementedError
 
     return xs, ys
+
+
+def match_dts(dt1s_early, dt1s_late, ddt_window, perform_coarse_finding: bool):
+    if not perform_coarse_finding:
+        dt1_early = max(dt1s_early, key=lambda p: p[2])  # get max threshold
+        dt1_late = max(dt1s_late, key=lambda p: p[2])
+
+    else:
+        dt1s_early = sorted(dt1s_early)
+        dt1s_late = sorted(dt1s_late)
+
+        i = j = 0  # two-pointer method
+        best = (None, (0, 0, 0), (0, 0, 0))  # min_ddt, early, late
+        while i < len(dt1s_early) and j < len(dt1s_late):
+            dt1_early = dt1s_early[i]
+            dt1_late = dt1s_late[j]
+            ddt = abs(dt1_early[0] - dt1_late[0])
+            if best[0] is None or (ddt < best[0] and ddt < ddt_window):
+                best = (ddt, dt1_early, dt1_late)
+
+            if dt1_early[0] < dt1_late[0]:
+                i += 1
+            else:
+                j += 1
+
+        if best[0] is None:
+            raise PeakFindingFailed("No coincident dt")
+
+        # Valid point found
+        # Approximate the resolvable resolution by finding the
+        # time differences found using the smallest resolution
+        def resolve(best_pt, pts) -> Tuple[int, int, float]:
+            left = best_pt[0] - best_pt[1]
+            right = best_pt[0] + best_pt[1]
+            assert len(pts) > 0
+            for pt in pts:
+                if left <= pt[0] <= right:
+                    break
+            return pt  # pyright: ignore[reportPossiblyUnboundVariable]
+
+        dt1_early = resolve(best[1], dt1s_early)
+        dt1_late = resolve(best[2], dt1s_late)
+
+    # Pass control back with expected variables
+    r = min([dt1_early[1], dt1_late[1]])
+    dt1 = dt1_early[0]
+    _dt1 = dt1_late[0]
+    return dt1, _dt1, r
