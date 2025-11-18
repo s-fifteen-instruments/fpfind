@@ -79,7 +79,11 @@ class PeakFindingFailed(ValueError):
         if self.dt is not None:
             suppl.append(f"dt={self.dt:11.0f}")
         if self.df is not None:
-            suppl.append(f"df={self.df*1e6:.4f}ppm")
+            suppl.append(f"df={self.df * 1e6:.4f}ppm")
         if suppl:
             text = f"{text} ({', '.join(suppl)})"
         return text
+
+
+class PeakFindingTerminated(RuntimeError):
+    pass
