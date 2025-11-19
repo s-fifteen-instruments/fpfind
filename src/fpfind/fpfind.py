@@ -594,7 +594,7 @@ def main():
             help=adv("Path to configuration file for saving, then immediately exit"))
         pgroup.add_argument(
             "-I", "--interruptible", action="store_true",
-            help=adv("Allow fpfind routine to be interrupted via SIGINT"))
+            help=advv("Allow fpfind routine to be interrupted via SIGINT"))
         pgroup.add_argument(
             "--experiment", action="store_true",
             help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
@@ -676,8 +676,8 @@ def main():
             "--convergence-rate", metavar="", type=float,
             help=configargparse.SUPPRESS)  # black hole for deprecated option
         pgroup.add_argument(
-            "-Q", "--convergence-order", metavar="", type=float, default=8,
-            help=advv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
+            "-Q", "--convergence-order", metavar="", type=float, default=4,
+            help=adv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
         pgroup.add_argument(
             "-f", "--quick", action="store_true",
             help=advv("Returns the first iteration results immediately"))
@@ -688,17 +688,17 @@ def main():
             "-s", "--separation", metavar="", type=float, default=6,
             help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
         pgroup.add_argument(
-            "--disable-comp", action="store_true",
-            help=advv("Disables frequency compensation entirely"))
-        pgroup.add_argument(
             "--force-comp", action="store_true",
             help=advv("Forces frequency compensation even when no drift detected"))
+        pgroup.add_argument(
+            "--disable-comp", action="store_true",
+            help=advv("Disables frequency compensation entirely"))
         pgroup.add_argument(
             "--max-df", metavar="", type=float, default=MAX_FCORR,
             help=advv("Expected maximum frequency difference (default: 122ppm)"))
         pgroup.add_argument(
             "--freq-threshold", metavar="", type=float, default=0.1,
-            help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
+            help=advv("Threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
 
         # Timing pre-compensation parameters
         #
@@ -712,7 +712,7 @@ def main():
         pgroup = parser.add_argument_group("timing precompensation")
         pgroup.add_argument(
             "--dt", metavar="", type=float, default=0,
-            help=advv("Specify initial timing shift, in units of ns (default: %(default)dns)"))
+            help=advv("Initial timing shift, in units of ns (default: %(default)dns)"))
         pgroup.add_argument(
             "--dt-use-bins", action="store_true",
             help=advv("Change dt units, from ns to timing resolution (i.e. -R)"))
