@@ -152,7 +152,6 @@ def time_freq(
         k_act = min(k, max(k_max, 1))  # required because 'k_max' may < 1
         Ta_act = k_act * r * N
         Ta_act = min(Ta_act, Ta)
-        print(k, k_max)
         log(2).debug(f"Iteration {iter} (r={r:.1f}ns, k={k_act:d})")
 
         # Perform cross-correlation
