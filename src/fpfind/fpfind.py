@@ -55,11 +55,6 @@ from fpfind.lib.utils import (
 
 logger, log = logging.get_logger("fpfind")
 
-# Allows quick prototyping by interrupting execution right before FFT
-# Trigger by running 'python3 -i -m fpfind.fpfind --config ... --experiment'.
-# For internal use only.
-_ENABLE_BREAKPOINT = False
-
 # Disables resolution doubling during initial peak search, used to converge
 # on specific fpfind parameters for peak search. This procedure is a relatively
 # cheap measure to increase peak finding yield, and thus is unlikely needed
@@ -553,7 +548,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global ENABLE_INTERRUPT, _ENABLE_BREAKPOINT, _DISABLE_DOUBLING
+    global ENABLE_INTERRUPT, _DISABLE_DOUBLING
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -599,9 +594,6 @@ def main():
         pgroup.add_argument(
             "-I", "--interruptible", action="store_true",
             help=advv("Allow fpfind routine to be interrupted via SIGINT"))
-        pgroup.add_argument(
-            "--experiment", action="store_true",
-            help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
         pgroup.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
@@ -787,10 +779,6 @@ def main():
     # Allow interrupting fpfind routine
     if args.interruptible:
         ENABLE_INTERRUPT = True
-
-    # Set experimental mode
-    if args.experiment:
-        _ENABLE_BREAKPOINT = True
 
     # Set lower threshold limit to frequency compensation before disabling
     df_target = 1e-10
