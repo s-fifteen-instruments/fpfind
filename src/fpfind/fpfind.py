@@ -227,7 +227,6 @@ def time_freq(
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
         threshold_dt = buffer * max(abs(prev_dt1), 1)
-        threshold_df = buffer * max(abs(f - 1), 1e-9)
 
         # If the duration has too few coincidences, the peak may not
         # show up at all. A peak is likely to have already been found, if
@@ -304,9 +303,7 @@ def time_freq(
                         )
 
                     allowed_dt_diff = Ts * max_df * 1e9
-                    dt1, _dt1, r = match_dts(
-                        dt1s_early, dt1s_late, allowed_dt_diff, perform_coarse_finding
-                    )
+                    dt1, _dt1, r = match_dts(dt1s_early, dt1s_late, allowed_dt_diff)
                     break
 
             # Evaluate measured frequency difference
@@ -315,6 +312,10 @@ def time_freq(
             # Some guard rails to make sure results make sense
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
+            threshold_df = buffer * max(abs(f - 1), 1e-9)
+            if f == 1:
+                threshold_df = buffer * MAX_FCORR * 1e6  # [ppm]
+
             if (
                 not perform_liberal_match
                 and not perform_coarse_finding
@@ -404,7 +405,9 @@ def time_freq(
         #     N //= int(np.round(r / r0))
 
         # Update for next iteration
-        prev_dt1 = dt1
+        max_dt1 = max(abs(dt1), abs(_dt1))
+        if max_dt1 != 0:
+            prev_dt1 = max_dt1
         bts = (bts - dt1) / (1 + df1)
         r = max(r / convergence_rate, r_target)
         iter += 1

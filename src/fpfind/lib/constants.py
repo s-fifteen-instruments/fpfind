@@ -17,6 +17,12 @@ class TSRES(enum.Enum):
     PS4 = 256  # S-Fifteen TDC2 timestamp
 
 
+class FrequencyCompensation(enum.Enum):
+    FORCE = enum.auto()  # never disable frequency compensation
+    ENABLE = enum.auto()  # disables when no frequency detected
+    DISABLE = enum.auto()
+
+
 EPOCH_LENGTH = 1 << 29  # from filespec
 FCORR_AMAXBITS = -13  # from 'freqcd.c'
 NTP_MAXDELAY_NS = 200e6  # for very *very* asymmetric channels
