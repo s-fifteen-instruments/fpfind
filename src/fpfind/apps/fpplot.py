@@ -39,7 +39,7 @@ def plotter(
     normalize=False,
     decimation=1,
 ):
-    bob = (bob - time) / (1 + freq * 1e-6)
+    bob = (bob - time) / (1 + freq)
     ys, xs, stats = histogram(
         alice,
         bob,
@@ -72,9 +72,9 @@ def plotter(
     print(f"Time elapsed: {elapsed:.3f}s")
     print(f"  s1: {s1:.0f}")
     print(f"  s2: {s2:.0f}")
-    print(f"  sg: {(len(alice)*len(bob))**0.5/elapsed:.0f}")
+    print(f"  sg: {(len(alice) * len(bob)) ** 0.5 / elapsed:.0f}")
     print(f"  c:  {c:.0f}")
-    print(f"Efficiency: {100*c/np.sqrt(s1*s2):.1f}%")
+    print(f"Efficiency: {100 * c / np.sqrt(s1 * s2):.1f}%")
 
     # Normalize?
     plt.subplots(figsize=(5, 3.5))
@@ -182,7 +182,7 @@ def main():  # noqa: PLR0915
     pgroup = parser.add_argument_group("plotting")
     pgroup.add_argument(
         "--df", type=float, default=0.0,
-        help="Specify clock skew, in units of ppm (default: %(default)f)")
+        help="Specify clock skew, in absolute units (default: %(default)f)")
     pgroup.add_argument(
         "--dt", type=float, default=0.0,
         help="Specify time delay, in units of ns (default: %(default)f)")
