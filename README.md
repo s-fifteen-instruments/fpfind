@@ -39,7 +39,7 @@ See [Hints](./docs/hints.md) for usage hints.
 
 ## Upgrading
 
-See [Migration](./docs/changelog.md) for moving between major versions, e.g. v2 to v3.
+See [Migration](./docs/migration.md) for moving between major versions, e.g. v2 to v3.
 
 ## Motivation
 
@@ -73,7 +73,7 @@ Certain issues may appear when attempting an install on RaspbianOS:
 
 ## Contributing
 
-Version tags (as of **v3**) follow [romantic versioning](https://romversioning.github.io/romver/) (a variation on semantic versioning). In the SemVer language: PATCH is incremented for non-breaking changes, MINOR for breaking changes that are easy to patch downstream, and MAJOR is reserved for large breaking changes that require careful syntax adjustments.
+Version tags (as of **v2**) follow [romantic versioning](https://romversioning.github.io/romver/) (a variation on semantic versioning). In the SemVer language: PATCH is incremented for non-breaking changes, MINOR for breaking changes that are easy to patch downstream, and MAJOR is reserved for large breaking changes that require careful syntax adjustments.
 
 Versions also come with a build string indicating the date of release in "YYYYMMDD" format, e.g. **v2.0.0+20241024**.
 This allows clear indication to the user whether the local version is severely outdated, while maintaining the clarity of semantic versioning.
