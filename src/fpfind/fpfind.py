@@ -139,6 +139,7 @@ def time_freq(
     f = 1
     iter = 1
     perform_coarse_finding = True
+    prev_dt1 = 0  # cached dt1 (not _dt1!)
 
     while True:
         # Use previously cached base resolution
@@ -150,6 +151,7 @@ def time_freq(
         k_act = min(k, max(k_max, 1))  # required because 'k_max' may < 1
         Ta_act = k_act * r * N
         Ta_act = min(Ta_act, Ta)
+        print(k, k_max)
         log(2).debug(f"Iteration {iter} (r={r:.1f}ns, k={k_act:d})")
 
         # Perform cross-correlation
@@ -224,7 +226,7 @@ def time_freq(
 
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
-        threshold_dt = buffer * max(abs(dt), 1)
+        threshold_dt = buffer * max(abs(prev_dt1), 1)
         threshold_df = buffer * max(abs(f - 1), 1e-9)
 
         # If the duration has too few coincidences, the peak may not
@@ -241,8 +243,8 @@ def time_freq(
                 f"early dt       = {dt1:10.0f} ns",
                 f"threshold dt   = {threshold_dt:10.0f} ns",
             )
-            if k < _NUM_WRAPS_LIMIT:
-                k += 1
+            k *= 2
+            if k <= k_max:
                 log(3).debug(
                     f"Reattempting with k = {k:d} due missing peak.",
                 )
@@ -326,8 +328,8 @@ def time_freq(
                     f"current df     = {df1 * 1e6:10.4f} ppm",
                     f"threshold df   = {threshold_df * 1e6:10.4f} ppm",
                 )
-                if k < _NUM_WRAPS_LIMIT:
-                    k += 1
+                k *= 2
+                if k <= k_max:
                     log(3).debug(
                         f"Reattempting with k = {k:d} due missing peak.",
                     )
@@ -398,7 +400,11 @@ def time_freq(
             do_frequency_compensation = False
             log(3).debug("Disabling frequency compensation.")
 
+        # if perform_coarse_finding:
+        #     N //= int(np.round(r / r0))
+
         # Update for next iteration
+        prev_dt1 = dt1
         bts = (bts - dt1) / (1 + df1)
         r = max(r / convergence_rate, r_target)
         iter += 1
