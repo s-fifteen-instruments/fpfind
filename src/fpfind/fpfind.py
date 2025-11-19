@@ -33,6 +33,7 @@ from fpfind.lib.constants import (
     EPOCH_LENGTH,
     MAX_FCORR,
     NTP_MAXDELAY_NS,
+    FrequencyCompensation,
     PeakFindingFailed,
 )
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
@@ -97,7 +98,7 @@ def time_freq(
     Ts: float,
     convergence_rate: float,
     quick: bool,
-    do_frequency_compensation: bool = True,
+    do_frequency_compensation: FrequencyCompensation = FrequencyCompensation.ENABLE,
 ):
     """Perform the actual frequency compensation routine.
 
@@ -261,7 +262,9 @@ def time_freq(
 
         _dt1 = dt1
         df1 = 0  # default values
-        if perform_liberal_match or do_frequency_compensation:
+        if perform_liberal_match or (
+            do_frequency_compensation is not FrequencyCompensation.DISABLE
+        ):
             # Use previously cached base resolution
             if perform_liberal_match:
                 r = _r0
@@ -397,8 +400,10 @@ def time_freq(
             break
 
         # Stop attempting frequency compensation if low enough
-        if abs(df1) < TARGET_DF and do_frequency_compensation:
-            do_frequency_compensation = False
+        if abs(df1) < TARGET_DF and (
+            do_frequency_compensation is FrequencyCompensation.ENABLE
+        ):
+            do_frequency_compensation = FrequencyCompensation.DISABLE
             log(3).debug("Disabling frequency compensation.")
 
         # if perform_coarse_finding:
@@ -437,7 +442,7 @@ def fpfind(
     precompensations: list,
     precompensation_fullscan: bool = False,
     quick: bool = False,
-    do_frequency_compensation: bool = True,
+    do_frequency_compensation: FrequencyCompensation = FrequencyCompensation.ENABLE,
 ):
     """Performs fpfind procedure.
 
@@ -652,6 +657,9 @@ def main():
             "--disable-comp", action="store_true",
             help=advv("Disables frequency compensation entirely"))
         pgroup_fpfind.add_argument(
+            "--force-comp", action="store_true",
+            help=advv("Forces frequency compensation even when no drift detected"))
+        pgroup_fpfind.add_argument(
             "-k", "--num-wraps", metavar="", type=int, default=1,
             help=adv("Specify number of arrays to wrap (default: %(default)d)"))
         pgroup_fpfind.add_argument(
@@ -793,6 +801,16 @@ def main():
         )
         sys.exit(1)
 
+    # Enforce only one frequency compensation setting
+    if args.disable_comp and args.force_comp:
+        log(0).error("Only one of '--disable-comp' and '--force-comp' allowed.")
+        sys.exit(1)
+    do_frequency_compensation = FrequencyCompensation.ENABLE
+    if args.disable_comp:
+        do_frequency_compensation = FrequencyCompensation.DISABLE
+    if args.force_comp:
+        do_frequency_compensation = FrequencyCompensation.FORCE
+
     # Disable resolution doubling, if option specified
     if args.disable_doubling:
         _DISABLE_DOUBLING = True
@@ -918,7 +936,7 @@ def main():
         precompensations=precompensations,
         precompensation_fullscan=args.precomp_fullscan,
         quick=args.quick,
-        do_frequency_compensation=not args.disable_comp,
+        do_frequency_compensation=do_frequency_compensation,
     )
 
     # To understand the options below, we first clarify some definitions:
