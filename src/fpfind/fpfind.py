@@ -235,6 +235,13 @@ def time_freq(
                     f"Reattempting with k = {k:d} due missing peak.",
                 )
                 continue
+
+            if r > r0:
+                raise PeakFindingFailed(
+                    "Did not converge",
+                    resolution=r,
+                    dt1=dt1,
+                )
             break
 
         # Catch if timing delay exceeded
@@ -325,6 +332,12 @@ def time_freq(
                     )
                     continue
 
+                if r > r0:
+                    raise PeakFindingFailed(
+                        "Did not converge",
+                        resolution=r,
+                        dt1=_dt1,
+                    )
                 break  # terminate if recovery not enabled
 
             # Catch if timing delay exceeded
@@ -672,7 +685,7 @@ def main():
             "--convergence-rate", metavar="", type=float,
             help=configargparse.SUPPRESS)  # black hole for deprecated option
         pgroup.add_argument(
-            "-Q", "--convergence-order", metavar="", type=float, default=4,
+            "-Q", "--convergence-order", metavar="", type=float, default=np.e,
             help=adv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
         pgroup.add_argument(
             "-f", "--quick", action="store_true",
@@ -792,6 +805,16 @@ def main():
             "'-Q'/'--convergence-order' instead with new behaviour."
         )
         sys.exit(1)
+
+    # Check convergence rate is valid and not power of two
+    if args.convergence_order < 1:
+        log(0).erorr("'-Q'/'--convergence-order' must be larger than 1.")
+    exponent = np.log2(args.convergence_order)
+    if args.peak_threshold == 0 and np.isclose(exponent, np.round(exponent)):
+        log(0).warning(
+            "'-Q'/'--convergence-order' should not be a power of two to avoid "
+            "infinite loops during liberal peak search."
+        )
 
     # Enforce only one frequency compensation setting
     if args.disable_comp and args.force_comp:
