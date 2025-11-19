@@ -37,6 +37,10 @@ freqcd -X -udF fpipe -f 568 < {TIMESTAMPS}
 
 See [Hints](./docs/hints.md) for usage hints.
 
+## Upgrading
+
+See [Migration](./docs/changelog.md) for moving between major versions, e.g. v2 to v3.
+
 ## Motivation
 
 Quantum key distribution requires some form of clock synchronization to retain high signal-noise ratio when pairing photon detection/generation events. This is usually achieved by having a stable clock (e.g. Rb clock, GPS receiver) or a separate clock transfer channel.
@@ -75,7 +79,7 @@ Versions also come with a build string indicating the date of release in "YYYYMM
 This allows clear indication to the user whether the local version is severely outdated, while maintaining the clarity of semantic versioning.
 Dynamic versioning is handled by poetry, so bumping the version simply involves adding a lightweight git tag (with "v" prepended, e.g. `git tag {VERSION} [COMMIT]`).
 
-Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **perf**, **refactor**, **style**, **test**, **docs**, **build**.
+Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **chore**, **test**, **docs**, **build**, **ci**.
 If a scope is provided, it should be one of:
 
 * **fpfind**
@@ -87,5 +91,5 @@ If a scope is provided, it should be one of:
 Commit messages can be automatically checked using `pre-commit`, after installing:
 
 ```bash
-pre-commit install --hook-type commit-msg
+pre-commit install
 ```
