@@ -32,6 +32,7 @@ import fpfind.lib._logging as logging
 from fpfind.lib.constants import (
     EPOCH_LENGTH,
     MAX_FCORR,
+    MAX_TIMING_RESOLUTION_NS,
     NTP_MAXDELAY_NS,
     FrequencyCompensation,
     PeakFindingFailed,
@@ -67,9 +68,6 @@ _DISABLE_DOUBLING = False
 
 # Toggles interruptible FFT
 ENABLE_INTERRUPT = False
-
-# Maximum timing resolution [ns] during timing doubling
-MAX_TIMING_RESOLUTION = 1e5
 
 # Type aliases
 NDArrayFloat: TypeAlias = npt.NDArray[np.floating]
@@ -200,7 +198,7 @@ def time_freq(
             sig = get_statistics(ys, r).significance
 
             # Catch runaway resolution doubling, limited by
-            if r > MAX_TIMING_RESOLUTION:
+            if r > MAX_TIMING_RESOLUTION_NS:
                 if perform_liberal_match:
                     if len(dt1s_early) == 0:
                         raise PeakFindingFailed(
@@ -288,7 +286,7 @@ def time_freq(
                 sig = get_statistics(_ys, r).significance
 
                 # Check intersections here
-                if r > MAX_TIMING_RESOLUTION:
+                if r > MAX_TIMING_RESOLUTION_NS:
                     if len(dt1s_late) == 0:
                         raise PeakFindingFailed(
                             "Time delay OOB  ",
