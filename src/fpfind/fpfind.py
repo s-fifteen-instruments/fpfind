@@ -29,6 +29,7 @@ import numpy.typing as npt
 from typing_extensions import TypeAlias
 
 import fpfind.lib._logging as logging
+from fpfind import VERSION
 from fpfind.lib.constants import (
     EPOCH_LENGTH,
     MAX_FCORR,
@@ -581,8 +582,11 @@ def main():
             "-h", "--help", action="count", default=0,
             help="Show this help message, with incremental verbosity, e.g. up to -hhh")
         pgroup.add_argument(
-            "-v", "--verbosity", action="count", default=0,
-            help="Specify debug verbosity, e.g. -vv for more verbosity")
+            "-v", "--verbosity", action="count", default=0,  # retained for backward compatibility
+            help=configargparse.SUPPRESS)  # black hole for deprecated option
+        pgroup.add_argument(
+            "-p", "--quiet", action="count", default=0,
+            help="Reduce log verbosity, e.g. -pp for less verbosity")
         pgroup.add_argument(
             "-L", "--logging", metavar="",
             help=adv("Log to file, if specified. Log level follows verbosity"))
@@ -758,11 +762,27 @@ def main():
         parser.print_help(sys.stderr)
         sys.exit(1)
 
-    # Set logging level and log arguments
+    # Set log arguments
     if args.logging is not None:
         logging.set_logfile(logger, args.logging)
-    logging.set_verbosity(logger, args.verbosity)
+
+    # Set logging level
+    # Default level should be DEBUG (instead of WARNING) for better
+    # accessibility to the tool. '--verbosity' kept for legacy reasons.
+    if args.quiet > 0:
+        verbosity = max(2 - args.quiet, 0)
+    elif args.verbosity == 0:
+        verbosity = 2
+    else:
+        verbosity = args.verbosity
+    logging.set_verbosity(logger, verbosity)
+    log(0).info(f"fpfind {VERSION}")
     log(0).info(f"{args}")
+    if args.quiet == 0 and args.verbosity > 0:
+        log(0).warning(
+            "'-v'/'--verbosity' has been deprecated, use "
+            "'-p'/'--quiet' instead with inverted behaviour."
+        )
 
     # Allow interrupting fpfind routine
     if args.interruptible:
@@ -804,7 +824,7 @@ def main():
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
     minimum_duration = (args.separation + 2) * Ta  # TODO: Check if this should be 1
-    log(0).debug(
+    log(0).info(
         "Reading timestamps...",
         f"Required duration: {minimum_duration * 1e-9:.1f}s "
         f"(cross-corr {Ta * 1e-9:.1f}s)",
@@ -887,7 +907,7 @@ def main():
     # Prepare frequency pre-compensations
     precompensations = [args.df]
     if args.precomp_enable:
-        log(0).debug("Generating frequency precompensations...")
+        log(0).info("Generating frequency precompensations...")
         precompensations = generate_precompensations(
             args.df,
             args.precomp_stop,
@@ -905,7 +925,7 @@ def main():
         alice = alice + args.dt * (args.initial_res if args.dt_use_bins else 1)
 
     # Start fpfind
-    log(0).debug("Running fpfind...")
+    log(0).info("Running fpfind...")
     dt, df = fpfind(
         alice, bob,
         num_wraps=args.num_wraps,
