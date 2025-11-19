@@ -5,6 +5,7 @@ import re
 import typing
 import warnings
 from dataclasses import dataclass
+from multiprocessing import Process, Queue
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -540,8 +541,48 @@ def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
     return int2epoch(epochint)
 
 
-# def chopper_timestamp(filename, resolution=TSRES.PS125, legacy=False, full=False):
-#     pass
+def xcorr(abs, bbs):
+    """Performs the main cross-correlation routine."""
+    afft = scipy.fft.rfft(abs)
+    bfft = scipy.fft.rfft(bbs)
+    ys = get_xcorr(afft, bfft)
+    return ys
+
+
+def xcorr_process(abs, bbs):
+    """Runs 'xcorr()' in a separate process for interruptible FFT.
+
+    Note:
+        Activate this with caution, because spawning a separate process incurs a penalty
+        of pickling and piping inputs/outputs between processes. Rough estimates yield
+        20% increase in runtime, e.g. 17.6(2)s -> 20.2(2) for N = 2^27 bins.
+    """
+    q = Queue()
+    args = (q, abs, bbs)
+
+    def _xcorr(q, *args, **kwargs):
+        result = xcorr(*args, **kwargs)
+        q.put(result)
+
+    p = Process(target=_xcorr, args=args)
+    p.start()
+    try:
+        return q.get()
+    except KeyboardInterrupt:  # SIGINT
+        p.terminate()
+        raise
+
+
+@typing.no_type_check
+def generate_fft_bins(
+    arr: list,
+    num_bins: int,
+    time_res: float,
+):
+    if len(arr) == 0:
+        raise ValueError("Array is empty!")
+    bin_arr = np.bincount(np.int32((arr // time_res) % num_bins), minlength=num_bins)
+    return bin_arr
 
 
 def histogram_fft2(
@@ -551,13 +592,15 @@ def histogram_fft2(
     duration,
     N,
     r,
+    interruptible: bool = False,
 ):
     """Convenience function that wraps histogram routines."""
     ats_early = slice_timestamps(ats, start, duration)
     bts_early = slice_timestamps(bts, start, duration)
-    afft = generate_fft(ats_early, N, r)
-    bfft = generate_fft(bts_early, N, r)
-    ys = get_xcorr(afft, bfft)
+    abs = generate_fft_bins(ats_early, N, r)
+    bbs = generate_fft_bins(bts_early, N, r)
+    _xcorr = xcorr_process if interruptible else xcorr
+    ys = _xcorr(abs, bbs)
 
     _dtype = np.int32  # signed number needed for negative delays
     if N * r > 2147483647:  # int32 max
@@ -586,24 +629,26 @@ def histogram_fft3(
     resolution,
     max_duration,
     strategy: CoarseHistogramStrategy = CoarseHistogramStrategy.RESOLUTION,
+    interruptible: bool = False,
 ):
     """Histogram with max duration limit."""
     ceil = lambda v: int(np.ceil(v))  # noqa: E731 (using lambda cleaner)
     factor = ceil(resolution * num_bins / max_duration)
     factor = 1 << ceil(np.log2(factor))  # better equal to 2^k for FFT/reshape
     duration = min(duration, max_duration)
+    args = (ats, bts, start, duration, num_bins, resolution, interruptible)
 
     if factor == 1:
-        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+        xs, ys = histogram_fft2(*args)
 
     elif strategy is CoarseHistogramStrategy.RESOLUTION:
         resolution = resolution / factor
-        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+        xs, ys = histogram_fft2(*args)
         xs, ys = fold_histogram(xs, ys, factor)
 
     elif strategy is CoarseHistogramStrategy.BINS:
         num_bins = int(num_bins // factor)
-        xs, ys = histogram_fft2(ats, bts, start, duration, num_bins, resolution)
+        xs, ys = histogram_fft2(*args)
 
     else:
         raise NotImplementedError

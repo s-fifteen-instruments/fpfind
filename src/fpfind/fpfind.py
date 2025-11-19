@@ -69,6 +69,9 @@ _DISABLE_DOUBLING = False
 # For internal use only.
 _NUM_WRAPS_LIMIT = 0
 
+# Toggles interruptible FFT
+ENABLE_INTERRUPT = False
+
 # Set lower limit to frequency compensation before disabling
 TARGET_DF = 1e-10
 
@@ -151,7 +154,9 @@ def time_freq(
 
         # Perform cross-correlation
         log(3).debug(f"Performing earlier xcorr (range: [0.00, {Ta_act * 1e-9:.2f}]s)")
-        xs, ys = histogram_fft3(ats, bts, 0, Ta_act, N, r, Ta)
+        xs, ys = histogram_fft3(
+            ats, bts, 0, Ta_act, N, r, Ta, interruptible=ENABLE_INTERRUPT
+        )
 
         # Calculate timing delay
         dt1 = get_timing_delay_fft(ys, xs)[0]  # get smaller candidate
@@ -264,7 +269,9 @@ def time_freq(
             log(3).debug(
                 f"Performing later xcorr (range: [{Ts * 1e-9:.2f}, {(Ts + Ta_act) * 1e-9:.2f}]s)",
             )
-            xs, _ys = histogram_fft3(ats, bts, Ts, Ta_act, N, r, Ta)
+            xs, _ys = histogram_fft3(
+                ats, bts, Ts, Ta_act, N, r, Ta, interruptible=ENABLE_INTERRUPT
+            )
 
             # Calculate timing delay for late set of timestamps
             _dt1 = get_timing_delay_fft(_ys, xs)[0]
@@ -539,7 +546,12 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global _ENABLE_BREAKPOINT, _DISABLE_DOUBLING, _NUM_WRAPS_LIMIT, TARGET_DF
+    global \
+        ENABLE_INTERRUPT, \
+        _ENABLE_BREAKPOINT, \
+        _DISABLE_DOUBLING, \
+        _NUM_WRAPS_LIMIT, \
+        TARGET_DF
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -579,6 +591,9 @@ def main():
         pgroup_config.add_argument(
             "--save", metavar="", is_write_out_config_file_arg=True,
             help=adv("Path to configuration file for saving, then immediately exit"))
+        pgroup_config.add_argument(
+            "-I", "--interruptible", action="store_true",
+            help="Allow fpfind routine to be interrupted via SIGINT")
         pgroup_config.add_argument(
             "--experiment", action="store_true",
             help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
@@ -744,6 +759,10 @@ def main():
         logging.set_logfile(logger, args.logging)
     logging.set_verbosity(logger, args.verbosity)
     log(0).info(f"{args}")
+
+    # Allow interrupting fpfind routine
+    if args.interruptible:
+        ENABLE_INTERRUPT = True
 
     # Set experimental mode
     if args.experiment:
