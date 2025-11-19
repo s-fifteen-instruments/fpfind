@@ -29,10 +29,13 @@ import numpy.typing as npt
 from typing_extensions import TypeAlias
 
 import fpfind.lib._logging as logging
+from fpfind import VERSION
 from fpfind.lib.constants import (
     EPOCH_LENGTH,
     MAX_FCORR,
+    MAX_TIMING_RESOLUTION_NS,
     NTP_MAXDELAY_NS,
+    FrequencyCompensation,
     PeakFindingFailed,
 )
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
@@ -44,17 +47,13 @@ from fpfind.lib.utils import (
     get_timestamp_pattern,
     get_timing_delay_fft,
     histogram_fft3,
+    match_dts,
     normalize_timestamps,
     parse_docstring_description,
     round,
 )
 
 logger, log = logging.get_logger("fpfind")
-
-# Allows quick prototyping by interrupting execution right before FFT
-# Trigger by running 'python3 -i -m fpfind.fpfind --config ... --experiment'.
-# For internal use only.
-_ENABLE_BREAKPOINT = False
 
 # Disables resolution doubling during initial peak search, used to converge
 # on specific fpfind parameters for peak search. This procedure is a relatively
@@ -63,19 +62,8 @@ _ENABLE_BREAKPOINT = False
 # For internal use only.
 _DISABLE_DOUBLING = False
 
-# Allow fpfind to automatically perform recovery actions when
-# insufficient coincidences is assumed to be in the cross-correlation calculation
-# For internal use only.
-_NUM_WRAPS_LIMIT = 0
-
 # Toggles interruptible FFT
 ENABLE_INTERRUPT = False
-
-# Controls learning rate, i.e. how much to decrease resolution by
-RES_REFINE_FACTOR = np.sqrt(2)
-
-# Set lower limit to frequency compensation before disabling
-TARGET_DF = 1e-10
 
 # Type aliases
 NDArrayFloat: TypeAlias = npt.NDArray[np.floating]
@@ -91,9 +79,13 @@ def time_freq(
     r0: float,
     r_target: float,
     S0: float,
+    max_dt: float,
+    max_df: float,
+    df_target: float,
     Ts: float,
+    convergence_rate: float,
     quick: bool,
-    do_frequency_compensation: bool = True,
+    do_frequency_compensation: FrequencyCompensation = FrequencyCompensation.ENABLE,
 ):
     """Perform the actual frequency compensation routine.
 
@@ -114,7 +106,10 @@ def time_freq(
         S0: Height of peak to discriminate as signal, in units of dev.
         Ts: Separation of cross-correlations, in units of ns.
     """
-    r = r0
+    # Optional new behaviour where the significance evaluation is deferred,
+    # instead looking for coincidences in timing differences
+    perform_liberal_match = S0 == 0
+    r = _r0 = r0
     k = k0
     Ta = r0 * N * k0
 
@@ -130,15 +125,21 @@ def time_freq(
     # Refinement loop, note resolution/duration will change during loop
     dt = 0
     f = 1
-    i = 1
+    iter = 1
+    perform_coarse_finding = True
+    prev_dt1 = 0  # cached dt1 (not _dt1!)
 
     while True:
+        # Use previously cached base resolution
+        if perform_liberal_match:
+            r = _r0
+
         # Dynamically adjust 'k' to avoid event over- and under-flow
-        k_max = np.floor(Ta / (r * N))
+        k_max = int(np.floor(Ta / (r * N)))
         k_act = min(k, max(k_max, 1))  # required because 'k_max' may < 1
         Ta_act = k_act * r * N
         Ta_act = min(Ta_act, Ta)
-        log(2).debug(f"Iteration {i} (r={r:.1f}ns, k={k_act:d})")
+        log(2).debug(f"Iteration {iter} (r={r:.1f}ns, k={k_act:d})")
 
         # Perform cross-correlation
         log(3).debug(f"Performing earlier xcorr (range: [0.00, {Ta_act * 1e-9:.2f}]s)")
@@ -151,7 +152,8 @@ def time_freq(
         sig = get_statistics(ys, r).significance
 
         # Dynamic search for resolution
-        while i == 1:
+        dt1s_early = []
+        while perform_liberal_match or perform_coarse_finding:
             log(4).debug(
                 f"Peak: S = {sig:.3f}, dt = {dt1}ns (resolution = {r:.0f}ns)",
             )
@@ -166,13 +168,16 @@ def time_freq(
                     dt1=dt1,
                 )
 
-            # If peak rejected, merge contiguous bins to double
-            # the resolution of the peak search
-            if sig >= S0:
-                log(5).debug("Accepted")
-                break
+            if abs(dt1) < max_dt:
+                dt1s_early.append((dt1, r, sig))
 
-            log(5).debug("Rejected")
+            # Check if peak threshold exceeded
+            if not perform_liberal_match:
+                if sig >= S0:
+                    log(5).debug("Accepted")
+                    break
+                log(5).debug("Rejected")
+
             if _DISABLE_DOUBLING:
                 raise PeakFindingFailed(
                     "Low significance",
@@ -181,13 +186,24 @@ def time_freq(
                     dt1=dt1,
                 )
 
-            xs, ys = fold_histogram(xs, ys, 2)
+            # If peak rejected, merge contiguous bins to double
+            # the resolution of the peak search
             r *= 2
+            xs, ys = fold_histogram(xs, ys, 2)
             dt1 = get_timing_delay_fft(ys, xs)[0]
             sig = get_statistics(ys, r).significance
 
             # Catch runaway resolution doubling, limited by
-            if r > 1e4:
+            if r > MAX_TIMING_RESOLUTION_NS:
+                if perform_liberal_match:
+                    if len(dt1s_early) == 0:
+                        raise PeakFindingFailed(
+                            "Time delay OOB  ",
+                            significance=sig,
+                            resolution=r,
+                            dt1=dt1,
+                        )
+                    break
                 raise PeakFindingFailed(
                     "Resolution OOB  ",
                     significance=sig,
@@ -197,28 +213,32 @@ def time_freq(
 
         # Calculate some thresholds to catch when peak was likely not found
         buffer = 1
-        threshold_dt = buffer * max(abs(dt), 1)
-        threshold_df = buffer * max(abs(f - 1), 1e-9)
+        threshold_dt = buffer * max(abs(prev_dt1), 1)
 
         # If the duration has too few coincidences, the peak may not
         # show up at all. A peak is likely to have already been found, if
         # the current iteration is more than 1. Attempt to retry with
         # larger 'num_wraps' if enabled in settings.
-        if i != 1 and abs(dt1) > threshold_dt:
+        if (
+            not perform_liberal_match
+            and not perform_coarse_finding
+            and abs(dt1) > threshold_dt
+        ):
             log(3).warning(
                 "Interrupted due spurious signal:",
                 f"early dt       = {dt1:10.0f} ns",
                 f"threshold dt   = {threshold_dt:10.0f} ns",
             )
-            if k < _NUM_WRAPS_LIMIT:
-                k += 1
+            k *= 2
+            if k <= k_max:
                 log(3).debug(
                     f"Reattempting with k = {k:d} due missing peak.",
                 )
                 continue
+            break
 
         # Catch if timing delay exceeded
-        if abs(dt1) > NTP_MAXDELAY_NS:
+        if not perform_liberal_match and abs(dt1) > max_dt:
             raise PeakFindingFailed(
                 "Time delay OOB  ",
                 significance=sig,
@@ -228,7 +248,14 @@ def time_freq(
 
         _dt1 = dt1
         df1 = 0  # default values
-        if do_frequency_compensation:
+        if perform_liberal_match or (
+            do_frequency_compensation is not FrequencyCompensation.DISABLE
+        ):
+            # Use previously cached base resolution
+            if perform_liberal_match:
+                r = _r0
+
+            # Perform cross-correlation
             log(3).debug(
                 f"Performing later xcorr (range: [{Ts * 1e-9:.2f}, {(Ts + Ta_act) * 1e-9:.2f}]s)",
             )
@@ -238,12 +265,51 @@ def time_freq(
 
             # Calculate timing delay for late set of timestamps
             _dt1 = get_timing_delay_fft(_ys, xs)[0]
+            sig = get_statistics(_ys, r).significance
+
+            # Attempt similar search for late timing difference
+            dt1s_late = []
+            while perform_liberal_match:
+                log(4).debug(
+                    f"Peak: S = {sig:.3f}, dt = {_dt1}ns (resolution = {r:.0f}ns)",
+                )
+                if abs(_dt1) < max_dt:
+                    dt1s_late.append((_dt1, r, sig))
+
+                r *= 2
+                xs, _ys = fold_histogram(xs, _ys, 2)
+                _dt1 = get_timing_delay_fft(_ys, xs)[0]
+                sig = get_statistics(_ys, r).significance
+
+                # Check intersections here
+                if r > MAX_TIMING_RESOLUTION_NS:
+                    if len(dt1s_late) == 0:
+                        raise PeakFindingFailed(
+                            "Time delay OOB  ",
+                            significance=sig,
+                            resolution=r,
+                            dt1=_dt1,
+                        )
+
+                    allowed_dt_diff = Ts * max_df * 1e9
+                    dt1, _dt1, r = match_dts(dt1s_early, dt1s_late, allowed_dt_diff)
+                    break
+
+            # Evaluate measured frequency difference
             df1 = (_dt1 - dt1) / Ts
 
             # Some guard rails to make sure results make sense
             # Something went wrong with peak searching, to return intermediate
             # results which are likely near correct values.
-            if i != 1 and (abs(_dt1) > threshold_dt or abs(df1) > threshold_df):
+            threshold_df = buffer * max(abs(f - 1), 1e-9)
+            if f == 1:
+                threshold_df = buffer * MAX_FCORR * 1e6  # [ppm]
+
+            if (
+                not perform_liberal_match
+                and not perform_coarse_finding
+                and (abs(_dt1) > threshold_dt or abs(df1) > threshold_df)
+            ):
                 log(3).warning(
                     "Interrupted due spurious signal:",
                     f"early dt       = {dt1:10.0f} ns",
@@ -252,8 +318,8 @@ def time_freq(
                     f"current df     = {df1 * 1e6:10.4f} ppm",
                     f"threshold df   = {threshold_df * 1e6:10.4f} ppm",
                 )
-                if k < _NUM_WRAPS_LIMIT:
-                    k += 1
+                k *= 2
+                if k <= k_max:
                     log(3).debug(
                         f"Reattempting with k = {k:d} due missing peak.",
                     )
@@ -262,7 +328,7 @@ def time_freq(
                 break  # terminate if recovery not enabled
 
             # Catch if timing delay exceeded
-            if abs(_dt1) > NTP_MAXDELAY_NS:
+            if not perform_liberal_match and abs(_dt1) > max_dt:
                 raise PeakFindingFailed(
                     "Time delay OOB  ",
                     significance=sig,
@@ -295,7 +361,7 @@ def time_freq(
         )
 
         # Throw error if compensation does not fall within bounds
-        if abs(f - 1) >= MAX_FCORR:
+        if abs(f - 1) >= max_df:
             raise PeakFindingFailed(
                 "Compensation OOB",
                 significance=sig,
@@ -307,23 +373,40 @@ def time_freq(
             )
 
         # Stop if resolution met, otherwise refine resolution
-        if r == r_target:
+        if r <= r_target:
             break
+
+        # Stop liberal search if current resolution is expected to
+        # return a reasonable result
+        if r == _r0:
+            perform_liberal_match = False
 
         # Terminate immediately if 'quick' results desired
         if quick:
             break
 
         # Stop attempting frequency compensation if low enough
-        if abs(df1) < TARGET_DF:
-            do_frequency_compensation = False
+        if abs(df1) < df_target and (
+            do_frequency_compensation is FrequencyCompensation.ENABLE
+        ):
+            do_frequency_compensation = FrequencyCompensation.DISABLE
             log(3).debug("Disabling frequency compensation.")
 
+        # if perform_coarse_finding:
+        #     N //= int(np.round(r / r0))
+
         # Update for next iteration
+        max_dt1 = max(abs(dt1), abs(_dt1))
+        if max_dt1 != 0:
+            prev_dt1 = max_dt1
         bts = (bts - dt1) / (1 + df1)
-        r /= Ts / Ta / RES_REFINE_FACTOR
-        r = max(r, r_target)
-        i += 1
+        r = max(r / convergence_rate, r_target)
+        iter += 1
+        perform_coarse_finding = False  # disable coarse search, i.e. iter > 1
+
+        # Cache resolution for the next iteration
+        if perform_liberal_match:
+            _r0 = r
 
     df = f - 1
     log(3).debug("Returning results.")
@@ -338,11 +421,15 @@ def fpfind(
     resolution: float,
     target_resolution: float,
     threshold: float,
+    max_dt: float,
+    max_df: float,
+    df_target: float,
     separation_duration: float,
+    convergence_rate: float,
     precompensations: list,
     precompensation_fullscan: bool = False,
     quick: bool = False,
-    do_frequency_compensation: bool = True,
+    do_frequency_compensation: FrequencyCompensation = FrequencyCompensation.ENABLE,
 ):
     """Performs fpfind procedure.
 
@@ -387,8 +474,12 @@ def fpfind(
                 resolution,
                 target_resolution,
                 threshold,
+                max_dt,
+                max_df,
+                df_target,
                 separation_duration,
                 quick=quick,
+                convergence_rate=convergence_rate,
                 do_frequency_compensation=do_frequency_compensation,
             )
         except ValueError as e:
@@ -457,13 +548,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global \
-        ENABLE_INTERRUPT, \
-        _ENABLE_BREAKPOINT, \
-        _DISABLE_DOUBLING, \
-        _NUM_WRAPS_LIMIT, \
-        TARGET_DF, \
-        RES_REFINE_FACTOR
+    global ENABLE_INTERRUPT, _DISABLE_DOUBLING
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -487,107 +572,29 @@ def main():
         )
 
         # Display arguments (group with defaults)
-        pgroup_config = parser.add_argument_group("display/configuration")
-        pgroup_config.add_argument(
+        pgroup = parser.add_argument_group("display/configuration")
+        pgroup.add_argument(
             "-h", "--help", action="count", default=0,
             help="Show this help message, with incremental verbosity, e.g. up to -hhh")
-        pgroup_config.add_argument(
-            "-v", "--verbosity", action="count", default=0,
-            help="Specify debug verbosity, e.g. -vv for more verbosity")
-        pgroup_config.add_argument(
+        pgroup.add_argument(
+            "-v", "--verbosity", action="count", default=0,  # retained for backward compatibility
+            help=configargparse.SUPPRESS)  # black hole for deprecated option
+        pgroup.add_argument(
+            "-p", "--quiet", action="count", default=0,
+            help="Reduce log verbosity, e.g. -pp for less verbosity")
+        pgroup.add_argument(
             "-L", "--logging", metavar="",
             help=adv("Log to file, if specified. Log level follows verbosity"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "--config", metavar="", is_config_file_arg=True,
             help=adv("Path to configuration file"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "--save", metavar="", is_write_out_config_file_arg=True,
             help=adv("Path to configuration file for saving, then immediately exit"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "-I", "--interruptible", action="store_true",
-            help="Allow fpfind routine to be interrupted via SIGINT")
-        pgroup_config.add_argument(
-            "--experiment", action="store_true",
-            help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
-
-        # Timestamp importing arguments
-        pgroup_ts = parser.add_argument_group("importing timestamps")
-        pgroup_ts.add_argument(
-            "-t", "--reference", metavar="",
-            help="Timestamp file in 'a1' format, from low-count side (reference)")
-        pgroup_ts.add_argument(
-            "-T", "--target", metavar="",
-            help="Timestamp file in 'a1' format, from high-count side")
-        pgroup_ts.add_argument(
-            "-X", "--legacy", action="store_true",
-            help="Parse raw timestamps in legacy mode (default: %(default)s)")
-        pgroup_ts.add_argument(
-            "-Z", "--skip-duration", metavar="", type=float, default=0,
-            help=adv("Specify initial duration to skip, in seconds (default: %(default)s)"))
-
-        # Epoch importing arguments
-        pgroup_ep = parser.add_argument_group("importing epochs")
-        pgroup_ep.add_argument(
-            "-d", "--sendfiles", metavar="",
-            help="SENDFILES, from low-count side (reference)")
-        pgroup_ep.add_argument(
-            "-D", "--t1files", metavar="",
-            help="T1FILES, from high-count side")
-        pgroup_ep.add_argument(
-            "-e", "--first-epoch", metavar="",
-            help=adv("Specify filename of first overlapping epoch, optional"))
-        pgroup_ep.add_argument(
-            "-z", "--skip-epochs", metavar="", type=int, default=0,
-            help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
-
-        # Epoch importing arguments
-        pgroup_chselect = parser.add_argument_group("channel selection")
-        pgroup_chselect.add_argument(
-            "-m", "--reference-pattern", metavar="", type=int,
-            help=adv("Pattern mask for selecting detector events from low-count side"))
-        pgroup_chselect.add_argument(
-            "-M", "--target-pattern", metavar="", type=int,
-            help=adv("Pattern mask for selecting detector events from high-count side"))
-
-        # fpfind parameters
-        pgroup_fpfind = parser.add_argument_group("fpfind parameters")
-        pgroup_fpfind.add_argument(
-            "--disable-comp", action="store_true",
-            help=advv("Disables frequency compensation entirely"))
-        pgroup_fpfind.add_argument(
-            "-k", "--num-wraps", metavar="", type=int, default=1,
-            help=adv("Specify number of arrays to wrap (default: %(default)d)"))
-        pgroup_fpfind.add_argument(
-            "--num-wraps-limit", metavar="", type=int, default=4,
-            help=advv("Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)"))
-        pgroup_fpfind.add_argument(
-            "-q", "--buffer-order", metavar="", type=int, default=26,
-            help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
-        pgroup_fpfind.add_argument(
-            "-R", "--initial-res", metavar="", type=int, default=16,
-            help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
-        pgroup_fpfind.add_argument(
-            "-r", "--final-res", metavar="", type=int, default=1,
-            help=adv("Specify desired fine timing resolution, in units of ns (default: %(default)dns)"))
-        pgroup_fpfind.add_argument(
-            "-s", "--separation", metavar="", type=float, default=6,
-            help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "-S", "--peak-threshold", metavar="", type=float, default=6,
-            help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "--disable-doubling", action="store_true",
-            help=advv("Disabling automatic resolution doubling during initial peak search"))
-        pgroup_fpfind.add_argument(
-            "--freq-threshold", metavar="", type=float, default=0.1,
-            help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "--convergence-rate", metavar="", type=float, default=np.sqrt(2),
-            help=advv("Specify the rate of fpfind convergence (default: %(default).4f)"))
-        pgroup_fpfind.add_argument(
-            "-f", "--quick", action="store_true",
-            help=advv("Returns the first iteration results immediately"))
-        pgroup_fpfind.add_argument(
+            help=advv("Allow fpfind routine to be interrupted via SIGINT"))
+        pgroup.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
                 "Specify output verbosity. Results are tab-delimited (default: %(default)d)\n"
@@ -599,6 +606,96 @@ def main():
             )
         )
 
+        # Timestamp importing arguments
+        pgroup = parser.add_argument_group("importing timestamps")
+        pgroup.add_argument(
+            "-t", "--reference", metavar="",
+            help="Timestamp file in 'a1' format, from low-count side (reference)")
+        pgroup.add_argument(
+            "-T", "--target", metavar="",
+            help="Timestamp file in 'a1' format, from high-count side")
+        pgroup.add_argument(
+            "-X", "--legacy", action="store_true",
+            help="Parse raw timestamps in legacy mode (default: %(default)s)")
+        pgroup.add_argument(
+            "-Z", "--skip-duration", metavar="", type=float, default=0,
+            help=adv("Specify initial duration to skip, in seconds (default: %(default)s)"))
+
+        # Epoch importing arguments
+        pgroup = parser.add_argument_group("importing epochs")
+        pgroup.add_argument(
+            "-d", "--sendfiles", metavar="",
+            help="SENDFILES, from low-count side (reference)")
+        pgroup.add_argument(
+            "-D", "--t1files", metavar="",
+            help="T1FILES, from high-count side")
+        pgroup.add_argument(
+            "-e", "--first-epoch", metavar="",
+            help=adv("Specify filename of first overlapping epoch, optional"))
+        pgroup.add_argument(
+            "-z", "--skip-epochs", metavar="", type=int, default=0,
+            help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
+
+        # Channel selection
+        pgroup = parser.add_argument_group("channel selection")
+        pgroup.add_argument(
+            "-m", "--reference-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from low-count side"))
+        pgroup.add_argument(
+            "-M", "--target-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from high-count side"))
+
+        # Timing compensation (pfind) parameters
+        pgroup = parser.add_argument_group("timing compensation")
+        pgroup.add_argument(
+            "-k", "--num-wraps", metavar="", type=int, default=1,
+            help=adv("Specify number of arrays to wrap (default: %(default)d)"))
+        pgroup.add_argument(
+            "-q", "--buffer-order", metavar="", type=int, default=26,
+            help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
+        pgroup.add_argument(
+            "-R", "--initial-res", metavar="", type=int, default=16,
+            help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
+        pgroup.add_argument(
+            "-r", "--final-res", metavar="", type=int, default=1,
+            help=adv("Specify desired fine timing resolution, in units of ns (default: %(default)dns)"))
+        pgroup.add_argument(
+            "--max-dt", metavar="", type=float, default=NTP_MAXDELAY_NS,
+            help=advv("Expected maximum timing difference, in units of ns (default: 200ms)"))
+        pgroup.add_argument(
+            "-S", "--peak-threshold", metavar="", type=float, default=6,
+            help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
+        pgroup.add_argument(
+            "--disable-doubling", action="store_true",
+            help=advv("Disabling automatic resolution doubling during initial peak search"))
+        pgroup.add_argument(
+            "--convergence-rate", metavar="", type=float,
+            help=configargparse.SUPPRESS)  # black hole for deprecated option
+        pgroup.add_argument(
+            "-Q", "--convergence-order", metavar="", type=float, default=4,
+            help=adv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
+        pgroup.add_argument(
+            "-f", "--quick", action="store_true",
+            help=advv("Returns the first iteration results immediately"))
+
+        # Frequency compensation parameters
+        pgroup = parser.add_argument_group("frequency compensation")
+        pgroup.add_argument(
+            "-s", "--separation", metavar="", type=float, default=6,
+            help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
+        pgroup.add_argument(
+            "--force-comp", action="store_true",
+            help=advv("Forces frequency compensation even when no drift detected"))
+        pgroup.add_argument(
+            "--disable-comp", action="store_true",
+            help=advv("Disables frequency compensation entirely"))
+        pgroup.add_argument(
+            "--max-df", metavar="", type=float, default=MAX_FCORR,
+            help=advv("Expected maximum frequency difference (default: 122ppm)"))
+        pgroup.add_argument(
+            "--freq-threshold", metavar="", type=float, default=0.1,
+            help=advv("Threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
+
         # Timing pre-compensation parameters
         #
         # This is used for further fine-tuning of inter-bin timing values, or an overall shift
@@ -608,32 +705,32 @@ def main():
         #
         # To align with the compensation terminology elucidated in the output inversion
         # explanation, the reference is compensated for by the timing pre-compensation, i.e. alice.
-        pgroup_tprecomp = parser.add_argument_group("timing precompensation")
-        pgroup_tprecomp.add_argument(
+        pgroup = parser.add_argument_group("timing precompensation")
+        pgroup.add_argument(
             "--dt", metavar="", type=float, default=0,
-            help=advvv("Specify initial timing shift, in units of ns (default: %(default)dns)"))
-        pgroup_tprecomp.add_argument(
+            help=advv("Initial timing shift, in units of ns (default: %(default)dns)"))
+        pgroup.add_argument(
             "--dt-use-bins", action="store_true",
-            help=advvv("Change dt units, from ns to timing resolution (i.e. -R)"))
+            help=advv("Change dt units, from ns to timing resolution (i.e. -R)"))
 
         # Frequency pre-compensation parameters
-        pgroup_precomp = parser.add_argument_group("frequency precompensation")
-        pgroup_precomp.add_argument(
+        pgroup = parser.add_argument_group("frequency precompensation")
+        pgroup.add_argument(
             "-P", "--precomp-enable", action="store_true",
             help="Enable precompensation scanning")
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--df", "--precomp-start", metavar="", type=float, default=0.0,
             help=adv("Specify the precompensation value (default: 0ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-step", metavar="", type=float, default=0.1e-6,
             help=adv("Specify the step value (default: 0.1ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-stop", metavar="", type=float, default=20e-6,
             help=adv("Specify the max scan range, one-sided (default: 20ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-ordered", action="store_true",
             help=advv("Test precompensations in increasing order (default: %(default)s)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-fullscan", action="store_true",
             help=advv("Force all precompensations to be tested (default: %(default)s)"))
 
@@ -657,31 +754,54 @@ def main():
         parser.print_help(sys.stderr)
         sys.exit(1)
 
-    # Set logging level and log arguments
+    # Set log arguments
     if args.logging is not None:
         logging.set_logfile(logger, args.logging)
-    logging.set_verbosity(logger, args.verbosity)
+
+    # Set logging level
+    # Default level should be DEBUG (instead of WARNING) for better
+    # accessibility to the tool. '--verbosity' kept for legacy reasons.
+    if args.quiet > 0:
+        verbosity = max(2 - args.quiet, 0)
+    elif args.verbosity == 0:
+        verbosity = 2
+    else:
+        verbosity = args.verbosity
+    logging.set_verbosity(logger, verbosity)
+    log(0).info(f"fpfind {VERSION}")
     log(0).info(f"{args}")
+    if args.quiet == 0 and args.verbosity > 0:
+        log(0).warning(
+            "'-v'/'--verbosity' has been deprecated, use "
+            "'-p'/'--quiet' instead with inverted behaviour."
+        )
 
     # Allow interrupting fpfind routine
     if args.interruptible:
         ENABLE_INTERRUPT = True
 
-    # Set experimental mode
-    if args.experiment:
-        _ENABLE_BREAKPOINT = True
-
-    # Set timing recovery mode
-    if args.num_wraps_limit > 0:
-        _NUM_WRAPS_LIMIT = int(args.num_wraps_limit)
-
-    # Set frequency threshold
+    # Set lower threshold limit to frequency compensation before disabling
+    df_target = 1e-10
     if args.freq_threshold > 0:
-        TARGET_DF = args.freq_threshold * 1e-9
+        df_target = args.freq_threshold * 1e-9
 
     # Set convergence rate
-    if args.convergence_rate > 0:
-        RES_REFINE_FACTOR = args.convergence_rate
+    if args.convergence_rate is not None:
+        log(0).error(
+            "'--convergence-rate' has been removed, use "
+            "'-Q'/'--convergence-order' instead with new behaviour."
+        )
+        sys.exit(1)
+
+    # Enforce only one frequency compensation setting
+    if args.disable_comp and args.force_comp:
+        log(0).error("Only one of '--disable-comp' and '--force-comp' allowed.")
+        sys.exit(1)
+    do_frequency_compensation = FrequencyCompensation.ENABLE
+    if args.disable_comp:
+        do_frequency_compensation = FrequencyCompensation.DISABLE
+    if args.force_comp:
+        do_frequency_compensation = FrequencyCompensation.FORCE
 
     # Disable resolution doubling, if option specified
     if args.disable_doubling:
@@ -692,7 +812,7 @@ def main():
     Ta = args.initial_res * num_bins * args.num_wraps
     Ts = args.separation * Ta
     minimum_duration = (args.separation + 2) * Ta  # TODO: Check if this should be 1
-    log(0).debug(
+    log(0).info(
         "Reading timestamps...",
         f"Required duration: {minimum_duration * 1e-9:.1f}s "
         f"(cross-corr {Ta * 1e-9:.1f}s)",
@@ -775,7 +895,7 @@ def main():
     # Prepare frequency pre-compensations
     precompensations = [args.df]
     if args.precomp_enable:
-        log(0).debug("Generating frequency precompensations...")
+        log(0).info("Generating frequency precompensations...")
         precompensations = generate_precompensations(
             args.df,
             args.precomp_stop,
@@ -793,7 +913,7 @@ def main():
         alice = alice + args.dt * (args.initial_res if args.dt_use_bins else 1)
 
     # Start fpfind
-    log(0).debug("Running fpfind...")
+    log(0).info("Running fpfind...")
     dt, df = fpfind(
         alice, bob,
         num_wraps=args.num_wraps,
@@ -801,11 +921,15 @@ def main():
         resolution=args.initial_res,
         target_resolution=args.final_res,
         threshold=args.peak_threshold,
+        max_dt=args.max_dt,
+        max_df=args.max_df,
+        df_target=df_target,
         separation_duration=Ts,
+        convergence_rate=args.convergence_order,
         precompensations=precompensations,
         precompensation_fullscan=args.precomp_fullscan,
         quick=args.quick,
-        do_frequency_compensation=not args.disable_comp,
+        do_frequency_compensation=do_frequency_compensation,
     )
 
     # To understand the options below, we first clarify some definitions:

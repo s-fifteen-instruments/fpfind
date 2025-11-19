@@ -17,6 +17,12 @@ class TSRES(enum.Enum):
     PS4 = 256  # S-Fifteen TDC2 timestamp
 
 
+class FrequencyCompensation(enum.Enum):
+    FORCE = enum.auto()  # never disable frequency compensation
+    ENABLE = enum.auto()  # disables when no frequency detected
+    DISABLE = enum.auto()
+
+
 EPOCH_LENGTH = 1 << 29  # from filespec
 FCORR_AMAXBITS = -13  # from 'freqcd.c'
 NTP_MAXDELAY_NS = 200e6  # for very *very* asymmetric channels
@@ -24,6 +30,9 @@ NTP_MAXDELAY_NS = 200e6  # for very *very* asymmetric channels
 # Derived constants
 EPOCH_DURATION = EPOCH_LENGTH * 1e-9  # in seconds
 MAX_FCORR = 2**FCORR_AMAXBITS
+
+# Maximum timing resolution [ns] during timing doubling
+MAX_TIMING_RESOLUTION_NS = 1e5
 
 # Compilations of numpy that do not include support for 128-bit floats will not
 # expose 'np.float128'. We map such instances directly into a 64-bit float instead.
