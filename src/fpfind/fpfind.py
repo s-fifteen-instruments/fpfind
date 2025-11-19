@@ -576,116 +576,29 @@ def main():
         )
 
         # Display arguments (group with defaults)
-        pgroup_config = parser.add_argument_group("display/configuration")
-        pgroup_config.add_argument(
+        pgroup = parser.add_argument_group("display/configuration")
+        pgroup.add_argument(
             "-h", "--help", action="count", default=0,
             help="Show this help message, with incremental verbosity, e.g. up to -hhh")
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "-v", "--verbosity", action="count", default=0,
             help="Specify debug verbosity, e.g. -vv for more verbosity")
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "-L", "--logging", metavar="",
             help=adv("Log to file, if specified. Log level follows verbosity"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "--config", metavar="", is_config_file_arg=True,
             help=adv("Path to configuration file"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "--save", metavar="", is_write_out_config_file_arg=True,
             help=adv("Path to configuration file for saving, then immediately exit"))
-        pgroup_config.add_argument(
+        pgroup.add_argument(
             "-I", "--interruptible", action="store_true",
-            help="Allow fpfind routine to be interrupted via SIGINT")
-        pgroup_config.add_argument(
+            help=adv("Allow fpfind routine to be interrupted via SIGINT"))
+        pgroup.add_argument(
             "--experiment", action="store_true",
             help=advvv("Enable debugging mode (needs 'python3 -im fpfind.fpfind')"))
-
-        # Timestamp importing arguments
-        pgroup_ts = parser.add_argument_group("importing timestamps")
-        pgroup_ts.add_argument(
-            "-t", "--reference", metavar="",
-            help="Timestamp file in 'a1' format, from low-count side (reference)")
-        pgroup_ts.add_argument(
-            "-T", "--target", metavar="",
-            help="Timestamp file in 'a1' format, from high-count side")
-        pgroup_ts.add_argument(
-            "-X", "--legacy", action="store_true",
-            help="Parse raw timestamps in legacy mode (default: %(default)s)")
-        pgroup_ts.add_argument(
-            "-Z", "--skip-duration", metavar="", type=float, default=0,
-            help=adv("Specify initial duration to skip, in seconds (default: %(default)s)"))
-
-        # Epoch importing arguments
-        pgroup_ep = parser.add_argument_group("importing epochs")
-        pgroup_ep.add_argument(
-            "-d", "--sendfiles", metavar="",
-            help="SENDFILES, from low-count side (reference)")
-        pgroup_ep.add_argument(
-            "-D", "--t1files", metavar="",
-            help="T1FILES, from high-count side")
-        pgroup_ep.add_argument(
-            "-e", "--first-epoch", metavar="",
-            help=adv("Specify filename of first overlapping epoch, optional"))
-        pgroup_ep.add_argument(
-            "-z", "--skip-epochs", metavar="", type=int, default=0,
-            help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
-
-        # Epoch importing arguments
-        pgroup_chselect = parser.add_argument_group("channel selection")
-        pgroup_chselect.add_argument(
-            "-m", "--reference-pattern", metavar="", type=int,
-            help=adv("Pattern mask for selecting detector events from low-count side"))
-        pgroup_chselect.add_argument(
-            "-M", "--target-pattern", metavar="", type=int,
-            help=adv("Pattern mask for selecting detector events from high-count side"))
-
-        # fpfind parameters
-        pgroup_fpfind = parser.add_argument_group("fpfind parameters")
-        pgroup_fpfind.add_argument(
-            "--disable-comp", action="store_true",
-            help=advv("Disables frequency compensation entirely"))
-        pgroup_fpfind.add_argument(
-            "--force-comp", action="store_true",
-            help=advv("Forces frequency compensation even when no drift detected"))
-        pgroup_fpfind.add_argument(
-            "-k", "--num-wraps", metavar="", type=int, default=1,
-            help=adv("Specify number of arrays to wrap (default: %(default)d)"))
-        pgroup_fpfind.add_argument(
-            "-q", "--buffer-order", metavar="", type=int, default=26,
-            help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
-        pgroup_fpfind.add_argument(
-            "-R", "--initial-res", metavar="", type=int, default=16,
-            help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
-        pgroup_fpfind.add_argument(
-            "-r", "--final-res", metavar="", type=int, default=1,
-            help=adv("Specify desired fine timing resolution, in units of ns (default: %(default)dns)"))
-        pgroup_fpfind.add_argument(
-            "-s", "--separation", metavar="", type=float, default=6,
-            help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "--max-dt", metavar="", type=float, default=NTP_MAXDELAY_NS,
-            help=advv("Expected maximum timing difference, in units of ns (default: 200ms)"))
-        pgroup_fpfind.add_argument(
-            "--max-df", metavar="", type=float, default=MAX_FCORR,
-            help=advv("Expected maximum frequency difference (default: 122ppm)"))
-        pgroup_fpfind.add_argument(
-            "-S", "--peak-threshold", metavar="", type=float, default=6,
-            help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "--disable-doubling", action="store_true",
-            help=advv("Disabling automatic resolution doubling during initial peak search"))
-        pgroup_fpfind.add_argument(
-            "--freq-threshold", metavar="", type=float, default=0.1,
-            help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
-        pgroup_fpfind.add_argument(
-            "--convergence-rate", metavar="", type=float,
-            help=configargparse.SUPPRESS)  # black hole for deprecated option
-        pgroup_fpfind.add_argument(
-            "-Q", "--convergence-order", metavar="", type=float, default=8,
-            help=advv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
-        pgroup_fpfind.add_argument(
-            "-f", "--quick", action="store_true",
-            help=advv("Returns the first iteration results immediately"))
-        pgroup_fpfind.add_argument(
+        pgroup.add_argument(
             "-V", "--output", metavar="", type=int, default=0, choices=range(1<<5),
             help=adv(f"{ArgparseCustomFormatter.RAW_INDICATOR}"
                 "Specify output verbosity. Results are tab-delimited (default: %(default)d)\n"
@@ -697,6 +610,96 @@ def main():
             )
         )
 
+        # Timestamp importing arguments
+        pgroup = parser.add_argument_group("importing timestamps")
+        pgroup.add_argument(
+            "-t", "--reference", metavar="",
+            help="Timestamp file in 'a1' format, from low-count side (reference)")
+        pgroup.add_argument(
+            "-T", "--target", metavar="",
+            help="Timestamp file in 'a1' format, from high-count side")
+        pgroup.add_argument(
+            "-X", "--legacy", action="store_true",
+            help="Parse raw timestamps in legacy mode (default: %(default)s)")
+        pgroup.add_argument(
+            "-Z", "--skip-duration", metavar="", type=float, default=0,
+            help=adv("Specify initial duration to skip, in seconds (default: %(default)s)"))
+
+        # Epoch importing arguments
+        pgroup = parser.add_argument_group("importing epochs")
+        pgroup.add_argument(
+            "-d", "--sendfiles", metavar="",
+            help="SENDFILES, from low-count side (reference)")
+        pgroup.add_argument(
+            "-D", "--t1files", metavar="",
+            help="T1FILES, from high-count side")
+        pgroup.add_argument(
+            "-e", "--first-epoch", metavar="",
+            help=adv("Specify filename of first overlapping epoch, optional"))
+        pgroup.add_argument(
+            "-z", "--skip-epochs", metavar="", type=int, default=0,
+            help=adv("Specify number of initial epochs to skip (default: %(default)d)"))
+
+        # Channel selection
+        pgroup = parser.add_argument_group("channel selection")
+        pgroup.add_argument(
+            "-m", "--reference-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from low-count side"))
+        pgroup.add_argument(
+            "-M", "--target-pattern", metavar="", type=int,
+            help=adv("Pattern mask for selecting detector events from high-count side"))
+
+        # Timing compensation (pfind) parameters
+        pgroup = parser.add_argument_group("timing compensation")
+        pgroup.add_argument(
+            "-k", "--num-wraps", metavar="", type=int, default=1,
+            help=adv("Specify number of arrays to wrap (default: %(default)d)"))
+        pgroup.add_argument(
+            "-q", "--buffer-order", metavar="", type=int, default=26,
+            help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
+        pgroup.add_argument(
+            "-R", "--initial-res", metavar="", type=int, default=16,
+            help="Specify initial coarse timing resolution, in units of ns (default: %(default)dns)")
+        pgroup.add_argument(
+            "-r", "--final-res", metavar="", type=int, default=1,
+            help=adv("Specify desired fine timing resolution, in units of ns (default: %(default)dns)"))
+        pgroup.add_argument(
+            "--max-dt", metavar="", type=float, default=NTP_MAXDELAY_NS,
+            help=advv("Expected maximum timing difference, in units of ns (default: 200ms)"))
+        pgroup.add_argument(
+            "-S", "--peak-threshold", metavar="", type=float, default=6,
+            help=adv("Specify the statistical significance threshold (default: %(default).1f)"))
+        pgroup.add_argument(
+            "--disable-doubling", action="store_true",
+            help=advv("Disabling automatic resolution doubling during initial peak search"))
+        pgroup.add_argument(
+            "--convergence-rate", metavar="", type=float,
+            help=configargparse.SUPPRESS)  # black hole for deprecated option
+        pgroup.add_argument(
+            "-Q", "--convergence-order", metavar="", type=float, default=8,
+            help=advv("Specify the reduction factor in timing uncertainty between iterations, larger = faster (default: %(default).4f)"))
+        pgroup.add_argument(
+            "-f", "--quick", action="store_true",
+            help=advv("Returns the first iteration results immediately"))
+
+        # Frequency compensation parameters
+        pgroup = parser.add_argument_group("frequency compensation")
+        pgroup.add_argument(
+            "-s", "--separation", metavar="", type=float, default=6,
+            help=adv("Specify width of separation, in units of epochs (default: %(default).1f)"))
+        pgroup.add_argument(
+            "--disable-comp", action="store_true",
+            help=advv("Disables frequency compensation entirely"))
+        pgroup.add_argument(
+            "--force-comp", action="store_true",
+            help=advv("Forces frequency compensation even when no drift detected"))
+        pgroup.add_argument(
+            "--max-df", metavar="", type=float, default=MAX_FCORR,
+            help=advv("Expected maximum frequency difference (default: 122ppm)"))
+        pgroup.add_argument(
+            "--freq-threshold", metavar="", type=float, default=0.1,
+            help=advv("Specify the threshold for frequency calculation, in units of ppb (default: %(default).1f)"))
+
         # Timing pre-compensation parameters
         #
         # This is used for further fine-tuning of inter-bin timing values, or an overall shift
@@ -706,32 +709,32 @@ def main():
         #
         # To align with the compensation terminology elucidated in the output inversion
         # explanation, the reference is compensated for by the timing pre-compensation, i.e. alice.
-        pgroup_tprecomp = parser.add_argument_group("timing precompensation")
-        pgroup_tprecomp.add_argument(
+        pgroup = parser.add_argument_group("timing precompensation")
+        pgroup.add_argument(
             "--dt", metavar="", type=float, default=0,
-            help=advvv("Specify initial timing shift, in units of ns (default: %(default)dns)"))
-        pgroup_tprecomp.add_argument(
+            help=advv("Specify initial timing shift, in units of ns (default: %(default)dns)"))
+        pgroup.add_argument(
             "--dt-use-bins", action="store_true",
-            help=advvv("Change dt units, from ns to timing resolution (i.e. -R)"))
+            help=advv("Change dt units, from ns to timing resolution (i.e. -R)"))
 
         # Frequency pre-compensation parameters
-        pgroup_precomp = parser.add_argument_group("frequency precompensation")
-        pgroup_precomp.add_argument(
+        pgroup = parser.add_argument_group("frequency precompensation")
+        pgroup.add_argument(
             "-P", "--precomp-enable", action="store_true",
             help="Enable precompensation scanning")
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--df", "--precomp-start", metavar="", type=float, default=0.0,
             help=adv("Specify the precompensation value (default: 0ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-step", metavar="", type=float, default=0.1e-6,
             help=adv("Specify the step value (default: 0.1ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-stop", metavar="", type=float, default=20e-6,
             help=adv("Specify the max scan range, one-sided (default: 20ppm)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-ordered", action="store_true",
             help=advv("Test precompensations in increasing order (default: %(default)s)"))
-        pgroup_precomp.add_argument(
+        pgroup.add_argument(
             "--precomp-fullscan", action="store_true",
             help=advv("Force all precompensations to be tested (default: %(default)s)"))
 
