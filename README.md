@@ -2,7 +2,7 @@
 
 An add-on implementation of frequency compensation for [qcrypto](https://github.com/s-fifteen-instruments/qcrypto).
 
-## Usage
+## Installation
 
 Requirements:
 
@@ -20,6 +20,8 @@ git clone -b "v2.2.x" https://github.com/s-fifteen-instruments/fpfind.git
 cd fpfind && pip3 install .
 ```
 
+## Usage
+
 Binaries and scripts are defined in [pyproject.toml](./pyproject.toml) and will be exposed to the path; commonly used scripts are listed below.
 
 ```bash
@@ -32,6 +34,8 @@ fpfind -t {TIMESTAMPS1} -T {TIMESTAMPS2}
 freqcd -X -udF fpipe -f 568 < {TIMESTAMPS}
 [costream -V5 ... |] freqservo -V5 -udF fpipe -f 568
 ```
+
+See [Hints](./docs/hints.md) for usage hints.
 
 ## Motivation
 
@@ -65,7 +69,9 @@ Certain issues may appear when attempting an install on RaspbianOS:
 
 ## Contributing
 
-Version tags (as of **v2**) follow [semantic versioning](https://semver.org/spec/v2.0.0.html), with a build string indicating the date of release in "YYYYMMDD" format, e.g. **v2.0.0+20241024**.
+Version tags (as of **v3**) follow [romantic versioning](https://romversioning.github.io/romver/) (a variation on semantic versioning). In the SemVer language: PATCH is incremented for non-breaking changes, MINOR for breaking changes that are easy to patch downstream, and MAJOR is reserved for large breaking changes that require careful syntax adjustments.
+
+Versions also come with a build string indicating the date of release in "YYYYMMDD" format, e.g. **v2.0.0+20241024**.
 This allows clear indication to the user whether the local version is severely outdated, while maintaining the clarity of semantic versioning.
 Dynamic versioning is handled by poetry, so bumping the version simply involves adding a lightweight git tag (with "v" prepended, e.g. `git tag {VERSION} [COMMIT]`).
 
