@@ -65,11 +65,6 @@ _ENABLE_BREAKPOINT = False
 # For internal use only.
 _DISABLE_DOUBLING = False
 
-# Allow fpfind to automatically perform recovery actions when
-# insufficient coincidences is assumed to be in the cross-correlation calculation
-# For internal use only.
-_NUM_WRAPS_LIMIT = 0
-
 # Toggles interruptible FFT
 ENABLE_INTERRUPT = False
 
@@ -559,12 +554,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global \
-        ENABLE_INTERRUPT, \
-        _ENABLE_BREAKPOINT, \
-        _DISABLE_DOUBLING, \
-        _NUM_WRAPS_LIMIT, \
-        TARGET_DF
+    global ENABLE_INTERRUPT, _ENABLE_BREAKPOINT, _DISABLE_DOUBLING, TARGET_DF
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -661,9 +651,6 @@ def main():
         pgroup_fpfind.add_argument(
             "-k", "--num-wraps", metavar="", type=int, default=1,
             help=adv("Specify number of arrays to wrap (default: %(default)d)"))
-        pgroup_fpfind.add_argument(
-            "--num-wraps-limit", metavar="", type=int, default=4,
-            help=advv("Enables and specifies peak recovery 'num_wraps' limit (default: %(default)d)"))
         pgroup_fpfind.add_argument(
             "-q", "--buffer-order", metavar="", type=int, default=26,
             help="Specify FFT buffer order, N = 2**q (default: %(default)d)")
@@ -783,10 +770,6 @@ def main():
     # Set experimental mode
     if args.experiment:
         _ENABLE_BREAKPOINT = True
-
-    # Set timing recovery mode
-    if args.num_wraps_limit > 0:
-        _NUM_WRAPS_LIMIT = int(args.num_wraps_limit)
 
     # Set frequency threshold
     if args.freq_threshold > 0:
