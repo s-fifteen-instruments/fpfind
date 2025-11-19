@@ -68,9 +68,6 @@ _DISABLE_DOUBLING = False
 # Toggles interruptible FFT
 ENABLE_INTERRUPT = False
 
-# Set lower limit to frequency compensation before disabling
-TARGET_DF = 1e-10
-
 # Maximum timing resolution [ns] during timing doubling
 MAX_TIMING_RESOLUTION = 1e5
 
@@ -90,6 +87,7 @@ def time_freq(
     S0: float,
     max_dt: float,
     max_df: float,
+    df_target: float,
     Ts: float,
     convergence_rate: float,
     quick: bool,
@@ -394,7 +392,7 @@ def time_freq(
             break
 
         # Stop attempting frequency compensation if low enough
-        if abs(df1) < TARGET_DF and (
+        if abs(df1) < df_target and (
             do_frequency_compensation is FrequencyCompensation.ENABLE
         ):
             do_frequency_compensation = FrequencyCompensation.DISABLE
@@ -431,6 +429,7 @@ def fpfind(
     threshold: float,
     max_dt: float,
     max_df: float,
+    df_target: float,
     separation_duration: float,
     convergence_rate: float,
     precompensations: list,
@@ -483,6 +482,7 @@ def fpfind(
                 threshold,
                 max_dt,
                 max_df,
+                df_target,
                 separation_duration,
                 quick=quick,
                 convergence_rate=convergence_rate,
@@ -554,7 +554,7 @@ def generate_precompensations(start, stop, step, ordered=False) -> list:
 
 # fmt: on
 def main():
-    global ENABLE_INTERRUPT, _ENABLE_BREAKPOINT, _DISABLE_DOUBLING, TARGET_DF
+    global ENABLE_INTERRUPT, _ENABLE_BREAKPOINT, _DISABLE_DOUBLING
     script_name = Path(sys.argv[0]).name
 
     # Disable Black formatting
@@ -771,9 +771,10 @@ def main():
     if args.experiment:
         _ENABLE_BREAKPOINT = True
 
-    # Set frequency threshold
+    # Set lower threshold limit to frequency compensation before disabling
+    df_target = 1e-10
     if args.freq_threshold > 0:
-        TARGET_DF = args.freq_threshold * 1e-9
+        df_target = args.freq_threshold * 1e-9
 
     # Set convergence rate
     if args.convergence_rate is not None:
@@ -913,6 +914,7 @@ def main():
         threshold=args.peak_threshold,
         max_dt=args.max_dt,
         max_df=args.max_df,
+        df_target=df_target,
         separation_duration=Ts,
         convergence_rate=args.convergence_order,
         precompensations=precompensations,
