@@ -1,0 +1,3 @@
+[submodule "tests/data/internal"]
+	path = tests/data/internal
+	url = https://git.qolah.org/qolah/bitstream-data
