@@ -54,11 +54,12 @@ import pathlib
 import struct
 import sys
 import warnings
-from typing import Optional
+from typing import Optional, Union
 
 import numba
 import numpy as np
 import tqdm
+from numpy.typing import NDArray
 
 from fpfind import NP_PRECISEFLOAT, TSRES
 
@@ -68,16 +69,18 @@ from fpfind import NP_PRECISEFLOAT, TSRES
 
 
 def _parse_a1(
-    data,
+    data: NDArray[np.uint32],
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
 ):
+    """Internal parser for a1 format.
+
+    'data' should have shape (N, 2).
     """
-    Args:
-        data: np.array[np.int32] with shape (N, 2)
-    """
+    assert data.ndim == 2 and data.shape[1] == 2
+
     high_pos = 1
     low_pos = 0
     if legacy:
@@ -87,46 +90,45 @@ def _parse_a1(
         r = (data[:, low_pos] & 0b10000).astype(bool)  # check rollover flag
         data = data[~r]
 
-    t = (np.uint64(data[:, high_pos]) << 22) + (data[:, low_pos] >> 10)
-    t = _format_timestamps(t, resolution, fractional)
-    p = data[:, low_pos] & 0xF
-    return t, p
+    high_words = data[:, high_pos].astype(np.uint64) << np.uint(22)
+    low_words = data[:, low_pos] >> np.uint(10)
+    ts = _format_timestamps(high_words + low_words, resolution, fractional)
+    ps = data[:, low_pos] & 0xF
+    return ts, ps
 
 
 def _parse_a0(
-    data,
+    data: NDArray[np.uint32],
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
 ):
-    """
-    Args:
-        data: np.array[np.int32] with shape (N, 2)
-    """
     return _parse_a1(data, False, resolution, fractional, ignore_rollover)
 
 
 def _parse_a2(
-    data,
+    data: NDArray[np.uint64],
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
 ):
-    """
-    Args:
-        data: np.array[np.int64] with shape (N,)
-    """
+    assert data.ndim == 1
+
     if ignore_rollover:
         r = (data & 0b10000).astype(bool)  # check rollover flag
         data = data[~r]
 
-    t = np.uint64(data >> 10)
-    t = _format_timestamps(t, resolution, fractional)
-    p = data & 0xF
-    return t, p
+    t = data >> np.uint64(10)
+    ts = _format_timestamps(t, resolution, fractional)
+    ps = (data & 0xF).astype(np.uint32)
+    return ts, ps
 
 
-def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
+def _format_timestamps(
+    t: NDArray[np.uint64],
+    resolution: TSRES,
+    fractional: bool,
+) -> Union[NDArray[NP_PRECISEFLOAT], NDArray[np.uint64]]:
     """Returns conversion of timestamps into desired format and resolution.
 
     Note:
@@ -145,11 +147,10 @@ def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
         e.g. 1GB timestamp file corresponds to 1250 loops.
     """
     if fractional:
-        t = np.array(t, dtype=NP_PRECISEFLOAT)
-        t = t / (TSRES.PS4.value / resolution.value)
+        tf = t.astype(NP_PRECISEFLOAT)
+        return tf / (TSRES.PS4.value / resolution.value)
     elif resolution is not TSRES.PS4:  # short-circuit
-        t = np.array(t, dtype=np.uint64)
-        t = t // int(TSRES.PS4.value // resolution.value)
+        return t // np.uint(TSRES.PS4.value // resolution.value)
     return t
 
 
@@ -160,7 +161,7 @@ def _format_timestamps(t: list, resolution: TSRES, fractional: bool):
 
 def read_a0(
     filename: str,
-    legacy: bool = None,
+    legacy: Union[bool, None] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
@@ -185,8 +186,8 @@ def read_a0(
         There is no legacy formatting for event types a0 and a2. Preserved in
         the function signature to maintain parity with 'read_a1'.
     """
-    data = np.genfromtxt(filename, delimiter="\n", dtype="U8")
-    data = np.array([int(v, 16) for v in data]).reshape(-1, 2)
+    data = np.genfromtxt(filename, delimiter="\n", dtype="S8")
+    data = np.array([int(v, 16) for v in data], dtype=np.uint32).reshape(-1, 2)
     return _parse_a0(data, resolution, fractional, ignore_rollover)
 
 
@@ -199,20 +200,20 @@ def _read_a1(
 ):
     """See documentation for 'read_a0'."""
     with open(filename, "rb") as f:
-        data = np.fromfile(file=f, dtype="=I").reshape(-1, 2)
+        data = np.fromfile(file=f, dtype="<u4").reshape(-1, 2)  # uint32
     return _parse_a1(data, legacy, resolution, fractional, ignore_rollover)
 
 
 def read_a2(
     filename: str,
-    legacy: bool = None,
+    legacy: Union[bool, None] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
 ):
     """See documentation for 'read_a0'."""
-    data = np.genfromtxt(filename, delimiter="\n", dtype="U16")
-    data = np.array([int(v, 16) for v in data])
+    data = np.genfromtxt(filename, delimiter="\n", dtype="S16")
+    data = np.array([int(v, 16) for v in data], dtype=np.uint64)
     return _parse_a2(data, resolution, fractional, ignore_rollover)
 
 
@@ -517,7 +518,7 @@ def read_a1_overlapping(
         if duration > end - start:
             warnings.warn(
                 "Duration requested is longer than available data: "
-                f"{duration:.2f}s > {end-start:.2f}s"
+                f"{duration:.2f}s > {end - start:.2f}s"
             )
         end = duration + start
 
@@ -892,10 +893,10 @@ def print_statistics_report(
         print(f"  Multi-channel : {multi_counts:>{width}d}")
         print(f"  No channel    : {non_counts:>{width}d}")
         print(f"Duration (s) : {duration:15.9f}")
-        print(f"  ~ start    : {start_timestamp*1e-9:>15.9f}")
-        print(f"  ~ end      : {end_timestamp*1e-9:>15.9f}")
-        print(f"Event rate (/s)  : {int(num_events//duration)}")
-        print(f"  Detection rate : {int(num_detections//duration)}")
+        print(f"  ~ start    : {start_timestamp * 1e-9:>15.9f}")
+        print(f"  ~ end      : {end_timestamp * 1e-9:>15.9f}")
+        print(f"Event rate (/s)  : {int(num_events // duration)}")
+        print(f"  Detection rate : {int(num_detections // duration)}")
         print(f"Detection patterns: {sorted(map(int, patterns))}")
 
 
