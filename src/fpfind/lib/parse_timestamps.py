@@ -54,7 +54,7 @@ import pathlib
 import struct
 import sys
 import warnings
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import numba
 import numpy as np
@@ -62,6 +62,16 @@ import tqdm
 from numpy.typing import NDArray
 
 from fpfind import NP_PRECISEFLOAT, TSRES
+from fpfind.lib.typing import (
+    DetectorArray,
+    Float,
+    Integer,
+    IntegerArray,
+    Number,
+    PathLike,
+    TimestampArray,
+    TimestampDetectorStream,
+)
 
 ###########################################
 #  PARSERS (from internal integer array)  #
@@ -74,7 +84,7 @@ def _parse_a1(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """Internal parser for a1 format.
 
     'data' should have shape (N, 2).
@@ -93,7 +103,7 @@ def _parse_a1(
     high_words = data[:, high_pos].astype(np.uint64) << np.uint(22)
     low_words = data[:, low_pos] >> np.uint(10)
     ts = _format_timestamps(high_words + low_words, resolution, fractional)
-    ps = data[:, low_pos] & 0xF
+    ps = data[:, low_pos] & np.uint32(0xF)
     return ts, ps
 
 
@@ -102,7 +112,7 @@ def _parse_a0(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     return _parse_a1(data, False, resolution, fractional, ignore_rollover)
 
 
@@ -111,7 +121,7 @@ def _parse_a2(
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     assert data.ndim == 1
 
     if ignore_rollover:
@@ -128,7 +138,7 @@ def _format_timestamps(
     t: NDArray[np.uint64],
     resolution: TSRES,
     fractional: bool,
-) -> Union[NDArray[NP_PRECISEFLOAT], NDArray[np.uint64]]:
+) -> TimestampArray:
     """Returns conversion of timestamps into desired format and resolution.
 
     Note:
@@ -160,12 +170,12 @@ def _format_timestamps(
 
 
 def read_a0(
-    filename: str,
-    legacy: Union[bool, None] = None,
+    filename: PathLike,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """Converts a0 timestamp format into timestamps and detector pattern.
 
     'legacy' is set at the point of 'readevents' invocation, and determines
@@ -192,12 +202,12 @@ def read_a0(
 
 
 def _read_a1(
-    filename: str,
+    filename: PathLike,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """See documentation for 'read_a0'."""
     with open(filename, "rb") as f:
         data = np.fromfile(file=f, dtype="<u4").reshape(-1, 2)  # uint32
@@ -205,12 +215,12 @@ def _read_a1(
 
 
 def read_a2(
-    filename: str,
-    legacy: Union[bool, None] = None,
+    filename: PathLike,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """See documentation for 'read_a0'."""
     data = np.genfromtxt(filename, delimiter="\n", dtype="S16")
     data = np.array([int(v, 16) for v in data], dtype=np.uint64)
@@ -223,19 +233,19 @@ def read_a2(
 
 
 def read_a1(
-    filename: str,
+    filename: PathLike,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-    start: float = None,
-    end: float = None,
-    pattern: int = None,
+    start: Optional[Number] = None,
+    end: Optional[Number] = None,
+    pattern: Optional[Integer] = None,
     mask: bool = False,
     invert: bool = False,
-    buffer_size: int = 100_000,
+    buffer_size: Optional[Integer] = 100_000,
     relative_time: bool = False,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """Wrapper to sread_a1 for efficiently reading subsets of whole file.
 
     For descriptions of arguments, read the documentation:
@@ -268,6 +278,7 @@ def read_a1(
                 start += t[0] * 1e-9
             if end is not None:
                 end += t[0] * 1e-9
+
         i, j = get_timing_bounds(t, start, end, resolution)
         t = t[i:j]
         p = p[i:j]
@@ -286,8 +297,9 @@ def read_a1(
 
     # Return array of correct dtype if no data
     if len(ts) == 0:
-        t = _format_timestamps([], resolution, fractional)
-        p = np.array([], dtype=np.int32)  # consistent with %I format code
+        empty = np.array([], dtype=np.uint64)
+        t = _format_timestamps(empty, resolution, fractional)
+        p = np.array([], dtype=np.uint32)  # consistent with %I format code
         return t, p
 
     t = np.concatenate(ts)
@@ -296,19 +308,19 @@ def read_a1(
 
 
 def read_a1_from_buffer(
-    buffer,
+    buffer: Union[bytes, bytearray],
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
 ):
-    data = np.frombuffer(buffer, dtype="=I").reshape(-1, 2)
+    data = np.frombuffer(buffer, dtype="<u4").reshape(-1, 2)
     return _parse_a1(data, legacy, resolution, fractional, ignore_rollover)
 
 
 def read_a0_from_buffer(
-    buffer,
-    legacy: bool = None,
+    buffer: str,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
@@ -319,8 +331,8 @@ def read_a0_from_buffer(
 
 
 def read_a2_from_buffer(
-    buffer,
-    legacy: bool = None,
+    buffer: str,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
@@ -336,13 +348,13 @@ def read_a2_from_buffer(
 
 
 def sread_a1(
-    filename: str,
+    filename: PathLike,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-    buffer_size: int = 100_000,
+    buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampDetectorStream, int]:
     """Block streaming variant of 'read_a1'.
 
     For large timestamp datasets where either not all timestamps need
@@ -394,11 +406,11 @@ def sread_a1(
 
 
 def sread_a0(
-    filename: str,
-    legacy: bool = None,
+    filename: PathLike,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-    buffer_size: int = 100_000,
+    buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
 ):
     """See documentation for 'sread_a1'"""
@@ -419,11 +431,11 @@ def sread_a0(
 
 
 def sread_a2(
-    filename: str,
-    legacy: bool = None,
+    filename: PathLike,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-    buffer_size: int = 100_000,
+    buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
 ):
     """See documentation for 'sread_a1'"""
@@ -449,7 +461,7 @@ def sread_a2(
 
 
 def read_a1_start_end(
-    filename: str,
+    filename: PathLike,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
@@ -467,13 +479,13 @@ def read_a1_start_end(
 
 
 def read_a1_kth_timestamp(
-    filename,
-    k,
+    filename: PathLike,
+    k: IntegerArray,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     filesize = pathlib.Path(filename).stat().st_size
     num_events = filesize / 8  # 8 bytes per event
 
@@ -495,11 +507,11 @@ def read_a1_kth_timestamp(
 
 
 def read_a1_overlapping(
-    *filenames,
+    *filenames: PathLike,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-    duration: float = None,
+    duration: Optional[Float] = None,
 ):
     """Reads multiple timestamp files with overlapping durations.
 
@@ -544,7 +556,7 @@ def read_a1_overlapping(
 
 
 @numba.njit(parallel=True)
-def _duplicate_event_removal(data):
+def _duplicate_event_removal(data: NDArray[np.uint64]) -> NDArray[np.uint64]:
     """Subroutine for _consolidate_events().
 
     On top of removing duplicate timestamps, this function also merges duplicate
@@ -581,12 +593,12 @@ def _duplicate_event_removal(data):
 
 
 def _consolidate_events(
-    t: list,
-    p: list,
+    t: TimestampArray,
+    p: DetectorArray,
     resolution: TSRES = TSRES.NS1,
     sort: bool = False,
     allow_duplicates: bool = True,
-):
+) -> NDArray[np.uint64]:
     """Packs events into standard a1 timestamp format.
 
     If sorting is required, such as during timestamp merging or timestamp
@@ -606,7 +618,7 @@ def _consolidate_events(
     """
     data = (
         np.array(t, dtype=NP_PRECISEFLOAT) * (TSRES.PS4.value // resolution.value)
-    ).astype(np.uint64) << 10
+    ).astype(np.uint64) << np.uint64(10)
     data += np.array(p).astype(np.uint64)
     if sort:
         data = np.sort(data)
@@ -619,13 +631,13 @@ def _consolidate_events(
 
 
 def write_a2(
-    filename: str,
-    t: list,
-    p: list,
-    legacy: bool = None,
+    filename: PathLike,
+    t: TimestampArray,
+    p: DetectorArray,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     allow_duplicates: bool = True,
-):
+) -> None:
     data = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     with open(filename, "w") as f:
         for line in data:
@@ -633,13 +645,13 @@ def write_a2(
 
 
 def write_a0(
-    filename: str,
-    t: list,
-    p: list,
-    legacy: bool = None,
+    filename: PathLike,
+    t: TimestampArray,
+    p: DetectorArray,
+    legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     allow_duplicates: bool = True,
-):
+) -> None:
     events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     data = np.empty((2 * events.size,), dtype=np.uint32)
     data[0::2] = events & 0xFFFFFFFF
@@ -650,13 +662,13 @@ def write_a0(
 
 
 def write_a1(
-    filename: str,
-    t: list,
-    p: list,
+    filename: PathLike,
+    t: TimestampArray,
+    p: DetectorArray,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     allow_duplicates: bool = True,
-):
+) -> None:
     events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
     with open(filename, "wb") as f:
         for line in events:
@@ -672,14 +684,14 @@ def write_a1(
 
 
 def swrite_a1(
-    filename: str,
-    stream,
-    num_batches: Optional[int] = None,
+    filename: PathLike,
+    stream: TimestampDetectorStream,
+    num_batches: Optional[Integer] = None,
     legacy: bool = False,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
     allow_duplicates: bool = True,
-):
+) -> None:
     """Block streaming variant of 'write_a1'.
 
     Input stream assumed to have TSRES.NS1 resolution.
@@ -698,7 +710,7 @@ def swrite_a1(
         however - this is a future todo.
     """
     if display:
-        stream = tqdm.tqdm(stream, total=num_batches)
+        stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
     with open(filename, "wb") as f:
         for t, p in stream:
             events = _consolidate_events(
@@ -712,17 +724,17 @@ def swrite_a1(
 
 
 def swrite_a0(
-    filename: str,
-    stream,
-    num_batches: Optional[int] = None,
+    filename: PathLike,
+    stream: TimestampDetectorStream,
+    num_batches: Optional[Integer] = None,
     legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
     allow_duplicates: bool = True,
-):
+) -> None:
     """See documentation for 'swrite_a1'."""
     if display:
-        stream = tqdm.tqdm(stream, total=num_batches)
+        stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
     with open(filename, "w") as f:
         for t, p in stream:
             events = _consolidate_events(
@@ -736,17 +748,17 @@ def swrite_a0(
 
 
 def swrite_a2(
-    filename: str,
-    stream,
-    num_batches: Optional[int] = None,
+    filename: PathLike,
+    stream: TimestampDetectorStream,
+    num_batches: Optional[Integer] = None,
     legacy: Optional[bool] = None,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
     allow_duplicates: bool = True,
-):
+) -> None:
     """See documentation for 'swrite_a1'."""
     if display:
-        stream = tqdm.tqdm(stream, total=num_batches)
+        stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
     with open(filename, "w") as f:
         for t, p in stream:
             data = _consolidate_events(
@@ -761,7 +773,7 @@ def swrite_a2(
 ##############
 
 
-def print_statistics(filename: str, t: list, p: list):
+def print_statistics(filename: PathLike, t: TimestampArray, p: DetectorArray) -> None:
     """Prints statistics using timestamp event readers.
 
     Note:
@@ -770,10 +782,10 @@ def print_statistics(filename: str, t: list, p: list):
     """
     # Collect statistics
     count = np.count_nonzero
-    _ch1 = (count(p & 0b0001 != 0),)
-    _ch2 = (count(p & 0b0010 != 0),)
-    _ch3 = (count(p & 0b0100 != 0),)
-    _ch4 = (count(p & 0b1000 != 0),)
+    _ch1 = count(p & 0b0001 != 0)
+    _ch2 = count(p & 0b0010 != 0)
+    _ch3 = count(p & 0b0100 != 0)
+    _ch4 = count(p & 0b1000 != 0)
     print_statistics_report(
         filename=filename,
         num_events=len(t),
@@ -791,12 +803,12 @@ def print_statistics(filename: str, t: list, p: list):
 
 
 def print_statistics_stream(
-    filename: str,
-    stream,
-    num_batches: Optional[int] = None,
+    filename: PathLike,
+    stream: TimestampDetectorStream,
+    num_batches: Optional[Integer] = None,
     resolution: TSRES = TSRES.NS1,
     display: bool = True,
-):
+) -> None:
     """Prints statistics using timestamp event streamers."""
     # Calculate statistics
     first_t = None
@@ -814,7 +826,7 @@ def print_statistics_stream(
     # Processs batches of events
     count = np.count_nonzero
     if display:
-        stream = tqdm.tqdm(stream, total=num_batches)
+        stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
     for t, p in stream:
         _ch1 = count(p & 0b0001 != 0)
         _ch2 = count(p & 0b0010 != 0)
@@ -853,19 +865,19 @@ def print_statistics_stream(
 
 
 def print_statistics_report(
-    filename: str,
-    num_events: int,
-    num_detections: int,
-    ch1_counts: Optional[int] = None,
-    ch2_counts: Optional[int] = None,
-    ch3_counts: Optional[int] = None,
-    ch4_counts: Optional[int] = None,
-    multi_counts: Optional[int] = None,
-    non_counts: Optional[int] = None,
-    start_timestamp: Optional[float] = None,
-    end_timestamp: Optional[float] = None,
+    filename: PathLike,
+    num_events: Integer,
+    num_detections: Integer,
+    ch1_counts: Optional[Integer] = None,
+    ch2_counts: Optional[Integer] = None,
+    ch3_counts: Optional[Integer] = None,
+    ch4_counts: Optional[Integer] = None,
+    multi_counts: Optional[Integer] = None,
+    non_counts: Optional[Integer] = None,
+    start_timestamp: Optional[Float] = None,
+    end_timestamp: Optional[Float] = None,
     patterns: Optional[list] = None,
-):
+) -> None:
     """Prints the statistics report.
 
     All optional fields must be present if 'num_events' > 0.
@@ -884,6 +896,8 @@ def print_statistics_report(
         width = int(np.floor(np.log10(num_events))) + 1
     print(f"Total events    : {num_events:>{width}d}")
     if num_events != 0:
+        if start_timestamp is None or end_timestamp is None or patterns is None:
+            return
         duration = (end_timestamp - start_timestamp) * 1e-9
         print(f"  Detections    : {num_detections:>{width}d}")
         print(f"  Channel 1     : {ch1_counts:>{width}d}")
@@ -906,11 +920,11 @@ def print_statistics_report(
 
 
 def get_pattern_mask(
-    p: list,
-    pattern: int,
+    p: DetectorArray,
+    pattern: Integer,
     mask: bool = False,
     invert: bool = False,
-):
+) -> Tuple[NDArray[np.bool_], DetectorArray]:
     """Returns a mask with bits set where patterns match, as well as result.
 
     The function behaves differently when the pattern is either used as
@@ -956,6 +970,8 @@ def get_pattern_mask(
         filtering the timestamps, to allow subsequent post-processing based
         on the bitmask, e.g. inverting the returned bitmask, or mark patterns.
     """
+    masked: DetectorArray
+    pattern = np.uint32(pattern)
 
     # Fixed pattern
     if not mask:
@@ -982,11 +998,11 @@ def get_pattern_mask(
 
 
 def get_timing_bounds(
-    t: list,
-    start: Optional[float] = None,
-    end: Optional[float] = None,
+    t: TimestampArray,
+    start: Optional[Number] = None,
+    end: Optional[Number] = None,
     resolution: TSRES = TSRES.NS1,
-) -> list:
+) -> Tuple[int, int]:
     """Returns indices of start and end for region where timings match.
 
     The timing array is already assumed to be sorted, as part of the timestamp
@@ -1046,11 +1062,11 @@ def get_timing_bounds(
 
 
 def get_timing_mask(
-    t: list,
-    start: Optional[float] = None,
-    end: Optional[float] = None,
+    t: TimestampArray,
+    start: Optional[Float] = None,
+    end: Optional[Float] = None,
     resolution: TSRES = TSRES.NS1,
-) -> list:
+) -> NDArray[np.bool_]:
     """Returns a mask where timestamps are bounded between start and end.
 
     The timing array is already assumed to be sorted, as part of the timestamp
