@@ -14,62 +14,54 @@ if not is_extfloat_supported:
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--runslow", action="store_true", default=False, help="run slow tests"
+        "--internal", action="store_true", default=False, help="run internal tests"
     )
     parser.addoption(
-        "--float80",
-        action="store_true",
-        help="Check support for 80-bit extended precision floats",
+        "--slow", action="store_true", default=False, help="run slow tests"
     )
-    parser.addoption(
-        "--float64",
-        action="store_true",
-        help="Check support for 64-bit precision floats",
-    )
-
-
-def pytest_configure(config):
-    # fmt: off
-    config.addinivalue_line("markers", "slow: mark test as slow to run")
-    config.addinivalue_line("markers", "float80: mark test as requiring 80-bit float support")  # noqa: E501
-    config.addinivalue_line("markers", "float64: mark test as requiring 64-bit float as fallback for extended precision container")  # noqa: E501
-    # fmt: on
 
 
 def pytest_collection_modifyitems(config, items):
-    skip_slow = pytest.mark.skip(reason="need --runslow option to run")
-    if not config.getoption("--runslow"):
+    def skip(marker, reason):
         for item in items:
-            if "slow" in item.keywords:
-                item.add_marker(skip_slow)
+            if marker in item.keywords:
+                skip_marker = pytest.mark.skip(reason=reason)
+                item.add_marker(skip_marker)
 
-    # Ensure float64 and float80 not given at the same time
-    if config.getoption("--float80") and config.getoption("--float64"):
-        raise ValueError(
-            "'--float64' and '--float80' cannot be supplied at the same time"
-        )
+    if not config.getoption("--internal"):
+        skip("internal", "need --internal")
 
-    skip_float80 = pytest.mark.skip(reason="no support for extended precision")
-    skip_float64 = pytest.mark.skip(
-        reason="extended precision supported, ignoring float64 tests"
-    )
-    if (
-        (not is_extfloat_supported) and (not config.getoption("--float80"))
-    ) or config.getoption("--float64"):
-        for item in items:
-            if "float80" in item.keywords:
-                item.add_marker(skip_float80)
+    if not config.getoption("--slow"):
+        skip("slow", "need --slow")
+
+    if is_extfloat_supported:
+        skip("float64", "extended precision supported")
     else:
-        for item in items:
-            if "float64" in item.keywords:
-                item.add_marker(skip_float64)
+        skip("float80", "no support for extended precision")
 
 
 @pytest.fixture
-def path_tests(pytestconfig):
+def testdir(pytestconfig):
     return pytestconfig.rootpath / "tests"
 
 
 @pytest.fixture
-def path_tsdata(path_tests):
-    return path_tests / "data"
+def datadir(testdir):
+    return testdir / "data"
+
+
+@pytest.fixture
+def intdatadir(datadir):
+    return datadir / "internal"
+
+
+# To deprecate
+@pytest.fixture
+def path_tests(testdir):
+    return testdir
+
+
+# To deprecate
+@pytest.fixture
+def path_tsdata(datadir):
+    return datadir

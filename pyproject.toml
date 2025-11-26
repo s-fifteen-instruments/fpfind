@@ -34,7 +34,7 @@ show-timestamps = {reference = "src/fpfind/lib/show-timestamps", type = "file"}
 show-timestamps-hex = {reference = "src/fpfind/lib/show-timestamps-hex", type = "file"}
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.1"
+pytest = ">=8.3.5"  # last version supported for Python 3.8
 
 [tool.poetry-dynamic-versioning]
 enable = true
@@ -48,7 +48,18 @@ requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
 build-backend = "poetry_dynamic_versioning.backend"
 
 [tool.pytest.ini_options]
-addopts = "--ignore=tests/freqcd --ignore=tests/parse_epochs --ignore=tests/fpfind"
+addopts = """\
+    --ignore=tests/freqcd \
+    --ignore=tests/parse_epochs \
+    --ignore=tests/fpfind/test_fpfind_epoch.py \
+    --ignore=tests/fpfind/test_fpfind_timestamp.py \
+    """
+markers = [
+    "internal: for tests requiring access to internal test data",
+    "slow: for tests with long runtime",
+    "float80: for platforms with extended precision support (80-bit floats)",
+    "float64: for platforms without extended precision support",
+]
 
 [tool.ruff.lint]
 # Choose from list of rules: <https://docs.astral.sh/ruff/rules/>
