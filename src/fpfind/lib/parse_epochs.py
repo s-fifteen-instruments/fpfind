@@ -15,12 +15,14 @@ import datetime as dt
 import pathlib
 from dataclasses import dataclass, field
 from struct import pack, unpack
-from typing import NamedTuple
+from typing import BinaryIO, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+from numpy.typing import NDArray
 
 import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT, TSRES
+from fpfind.lib.typing import DetectorArray, Integer, PathLike, TimestampArray
 
 logger, log = logging.get_logger(__name__)
 
@@ -61,7 +63,7 @@ class HeadT4(NamedTuple):
 # Extracted from ref [2]
 
 
-def read_T1_header(file_name: str):
+def read_T1_header(file_name: PathLike) -> HeadT1:
     file_name = str(file_name)
     with open(file_name, "rb") as f:
         head_info = f.read(4 * 5)
@@ -75,7 +77,7 @@ def read_T1_header(file_name: str):
     return headt1
 
 
-def read_T2_header(file_name: str):
+def read_T2_header(file_name: PathLike) -> HeadT2:
     file_name = str(file_name)
     with open(file_name, "rb") as f:
         head_info = f.read(4 * 6)
@@ -89,7 +91,7 @@ def read_T2_header(file_name: str):
     return headt2
 
 
-def read_T3_header(file_name: str):
+def read_T3_header(file_name: PathLike) -> HeadT3:
     file_name = str(file_name)
     with open(file_name, "rb") as f:
         head_info = f.read(4 * 4)
@@ -103,7 +105,7 @@ def read_T3_header(file_name: str):
     return headt3
 
 
-def read_T4_header(file_name: str):
+def read_T4_header(file_name: PathLike) -> HeadT4:
     file_name = str(file_name)
     with open(file_name, "rb") as f:
         head_info = f.read(4 * 5)
@@ -120,7 +122,7 @@ def read_T4_header(file_name: str):
 # Epoch utility functions
 
 
-def date2epoch(datetime=None):
+def date2epoch(datetime: Optional[dt.datetime] = None) -> str:
     """Returns current epoch number as hex.
 
     Epochs are in units of 2^32 * 125e-12 == 0.53687 seconds.
@@ -136,7 +138,7 @@ def date2epoch(datetime=None):
     return f"{epoch_val:08x}"
 
 
-def epoch2date(epoch):
+def epoch2date(epoch: Union[str, bytes]) -> dt.datetime:
     """Returns datetime object corresponding to epoch.
 
     Epoch must be in hex format, e.g. "ba1f36c0".
@@ -148,11 +150,11 @@ def epoch2date(epoch):
     return dt.datetime.fromtimestamp(total_seconds)
 
 
-def epoch2int(epoch):
+def epoch2int(epoch: Union[str, bytes]) -> int:
     return int(epoch, base=16)
 
 
-def int2epoch(value):
+def int2epoch(value: int) -> str:
     return hex(value)[2:]
 
 
@@ -161,7 +163,7 @@ def int2epoch(value):
 
 
 def read_T1(
-    filename: str,
+    filename: PathLike,
     full_epoch: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
@@ -258,7 +260,9 @@ def read_T1(
     return timestamps, np.array(bases)
 
 
-def extract_bits(msb_size: int, buffer: int, size: int, fileobject=None):
+def extract_bits(
+    msb_size: int, buffer: int, size: int, fileobject: Optional[BinaryIO] = None
+) -> Tuple[int, int, int]:
     """Return 'msb_size'-bits from MSB of buffer, and the rest.
 
     If insufficient bits to load value, data is automatically loaded
@@ -308,7 +312,7 @@ class BufferedFileRead:
         that additional block-based buffering can be performed in-situ.
     """
 
-    def __init__(self, f, buffer_size: int = 100_000):
+    def __init__(self, f: BinaryIO, buffer_size: int = 100_000):
         self.f = f
         self.buffer_size = buffer_size
 
@@ -316,7 +320,7 @@ class BufferedFileRead:
         self.buffer = b""
         self.pos = 0
 
-    def read(self, num_bytes: int):
+    def read(self, num_bytes: int) -> Optional[bytes]:
         # Read desired amount of bytes
         result = self.buffer[self.pos : self.pos + num_bytes]
         self.pos += num_bytes
@@ -399,11 +403,11 @@ class BufferedFileRead2:
 
 
 def read_T2(
-    filename: str,
+    filename: PathLike,
     full_epoch: bool = False,
     resolution: TSRES = TSRES.NS1,
     fractional: bool = True,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     """Returns timestamp and detector information from T2 files.
 
     Timestamp and detector information follow the formats specified in
@@ -500,7 +504,12 @@ def read_T2(
     return timestamps, np.array(bases)
 
 
-def write_T1(directory, full_epoch, timestamps, detectors):
+def write_T1(
+    directory: PathLike,
+    full_epoch: Integer,
+    timestamps: TimestampArray,
+    detectors: Union[DetectorArray, Integer],
+) -> pathlib.Path:
     # Fit epoch to within 32-bits LSB
     full_epoch &= (1 << 32) - 1
 
@@ -508,10 +517,13 @@ def write_T1(directory, full_epoch, timestamps, detectors):
     target = directory / f"{full_epoch:x}"
 
     # Broadcast detectors if single value given
+    _detectors: DetectorArray
     if np.array(detectors).ndim == 0:
-        detectors = np.ones(len(timestamps)) * detectors
-    elif len(detectors) != len(timestamps):
+        _detectors = np.ones(len(timestamps), dtype=np.uint32) * np.uint32(detectors)
+    elif len(detectors) != len(timestamps):  # type: ignore (integer check performed)
         raise ValueError("Lengths of timestamps and detectors must match")
+    else:
+        _detectors = detectors  # type: ignore (array check performed)
 
     with open(target, "wb") as f:
         header = pack("iIIii", 0x101, full_epoch, len(timestamps), 49, 4)
@@ -520,7 +532,7 @@ def write_T1(directory, full_epoch, timestamps, detectors):
         # Write events, 4ps resolution
         # 17-bit LSB epoch fits into a timestamp event
         timestamp_epoch = (full_epoch & ((1 << 17) - 1)) << (32 + 5)
-        for timestamp, detector in zip(timestamps, detectors):
+        for timestamp, detector in zip(timestamps, _detectors):
             full_timestamp = timestamp_epoch + timestamp
             event = (full_timestamp << 10) + int(detector)
 
@@ -554,7 +566,7 @@ class ServiceT3:
     qber: float = 0.5  # default random
 
 
-def read_T3(file_name: str) -> ServiceT3:
+def read_T3(file_name: PathLike) -> ServiceT3:
     """Used to process rawkey files.
 
     Example data:
@@ -625,7 +637,7 @@ def read_T3(file_name: str) -> ServiceT3:
     return service
 
 
-def read_T4(filename: str):
+def read_T4(filename: PathLike) -> Tuple[NDArray[np.int64], NDArray[np.int64]]:
     """Returns timestamp indices and detector information from T4 files.
 
     Timestamp and detector information follow the formats specified in
@@ -643,8 +655,8 @@ def read_T4(filename: str):
     length = header.length
 
     # Accumulators
-    indices = []
-    bases = []
+    indices: List[int] = []
+    bases: List[int] = []
     time_index = 0
     buffer = 0
     size = 0  # number of bits in buffer
@@ -684,4 +696,4 @@ def read_T4(filename: str):
     if length and len(indices) != length:
         raise ValueError("Number of epochs do not match length specified in header")
 
-    return np.array(indices), np.array(bases)
+    return np.array(indices, dtype=np.int64), np.array(bases, dtype=np.int64)
