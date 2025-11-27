@@ -26,9 +26,7 @@ freqcd = {reference = "src/fpfind/freqcd", type = "file"}
 freqservo = "fpfind.freqservo:main"
 fpfind = "fpfind.fpfind:main"
 fpplot = "fpfind.apps.fpplot:main"
-parse_timestamps = "fpfind.lib.parse_timestamps:main"  # deprecating in v3
 parse-timestamps = "fpfind.lib.parse_timestamps:main"
-generate_freqcd_testcase = "fpfind.apps.generate_freqcd_testcase:main"  # deprecating in v3
 generate-freqcd-testcase = "fpfind.apps.generate_freqcd_testcase:main"
 show-timestamps = {reference = "src/fpfind/apps/show-timestamps", type = "file"}
 show-timestamps-hex = {reference = "src/fpfind/apps/show-timestamps-hex", type = "file"}
