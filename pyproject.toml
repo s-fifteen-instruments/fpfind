@@ -28,10 +28,10 @@ fpfind = "fpfind.fpfind:main"
 fpplot = "fpfind.apps.fpplot:main"
 parse_timestamps = "fpfind.lib.parse_timestamps:main"  # deprecating in v3
 parse-timestamps = "fpfind.lib.parse_timestamps:main"
-generate_freqcd_testcase = "fpfind.lib.generate_freqcd_testcase:main"  # deprecating in v3
-generate-freqcd-testcase = "fpfind.lib.generate_freqcd_testcase:main"
-show-timestamps = {reference = "src/fpfind/lib/show-timestamps", type = "file"}
-show-timestamps-hex = {reference = "src/fpfind/lib/show-timestamps-hex", type = "file"}
+generate_freqcd_testcase = "fpfind.apps.generate_freqcd_testcase:main"  # deprecating in v3
+generate-freqcd-testcase = "fpfind.apps.generate_freqcd_testcase:main"
+show-timestamps = {reference = "src/fpfind/apps/show-timestamps", type = "file"}
+show-timestamps-hex = {reference = "src/fpfind/apps/show-timestamps-hex", type = "file"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = ">=8.3.5"  # last version supported for Python 3.8

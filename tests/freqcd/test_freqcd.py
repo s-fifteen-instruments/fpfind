@@ -4,7 +4,7 @@ import subprocess
 
 DIRECTORY = pathlib.Path("src/fpfind")
 freqcd = DIRECTORY / "freqcd"
-tester = DIRECTORY / "lib/generate_freqcd_testcase.py"
+tester = DIRECTORY / "apps/generate_freqcd_testcase.py"
 
 def parse_ts_base10(output):
     """Format: b'[NUM1]\\n[NUM2]\\n..."""

@@ -4,7 +4,7 @@ import subprocess
 
 DIRECTORY = pathlib.Path("src/fpfind")
 freqcd = DIRECTORY / "freqcd"
-tester = DIRECTORY / "lib/generate_freqcd_testcase.py"
+tester = DIRECTORY / "apps/generate_freqcd_testcase.py"
 
 # TODO: Formalize testcases
 
@@ -36,7 +36,7 @@ mkfifo testinput
 
 # Start script (different shell)
 ./src/fpfind/freqcd -i testinput -f 1000000 -F testfifo \
-    | ./src/fpfind/lib/generate_freqcd_testcase.py -
+    | ./src/fpfind/apps/generate_freqcd_testcase.py -
 
 # Open file descriptors for write
 exec 3>testfifo
@@ -44,7 +44,7 @@ exec 4>testinput
 
 # Pipe timestamps
 # Expected output: (as per 'test_freqcd.py')
-python3 ./src/fpfind/lib/generate_freqcd_testcase.py \
+python3 ./src/fpfind/apps/generate_freqcd_testcase.py \
     -t 0 1_000_000_000 2_000_000_000 >> testinput
 
 # Update freqcorr value
@@ -52,7 +52,7 @@ echo "0" >> testinput
 
 # Pipe more timestamps
 # Expected output: No change
-python3 ./src/fpfind/lib/generate_freqcd_testcase.py \
+python3 ./src/fpfind/apps/generate_freqcd_testcase.py \
     -t 3_000_000_000 4_000_000_000 >> testinput
 
 # Teardown
