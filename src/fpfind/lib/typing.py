@@ -10,9 +10,15 @@ from fpfind import NP_PRECISEFLOAT
 Number: TypeAlias = Union[int, float, np.integer, np.floating]
 Integer: TypeAlias = Union[int, np.integer]
 Float: TypeAlias = Union[float, np.floating]
-IntegerArray: TypeAlias = Union[NDArray[np.integer], List[Integer]]
+Complex_: TypeAlias = Union[np.complex64, np.complex128, np.complex256]
+Complex: TypeAlias = Union[complex, Complex_]
 
-TimestampArray: TypeAlias = Union[NDArray[np.uint64], NDArray[NP_PRECISEFLOAT]]
+NumberArray: TypeAlias = Union[NDArray[np.number], List[Number]]
+IntegerArray: TypeAlias = Union[NDArray[np.integer], List[Integer]]
+FloatArray: TypeAlias = Union[NDArray[np.floating], List[Float]]
+ComplexArray: TypeAlias = Union[NDArray[Complex_], List[Complex]]
+
+TimestampArray: TypeAlias = NDArray[Union[NP_PRECISEFLOAT, np.uint64]]
 DetectorArray: TypeAlias = NDArray[np.uint32]
 TimestampDetectorArray: TypeAlias = Tuple[TimestampArray, DetectorArray]
 TimestampDetectorStream: TypeAlias = Iterator[TimestampDetectorArray]

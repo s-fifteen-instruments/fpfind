@@ -2,31 +2,39 @@ import argparse
 import enum
 import pathlib
 import re
-import typing
 import warnings
 from dataclasses import dataclass
 from multiprocessing import Process, Queue
 from typing import Optional, Tuple, Union
 
 import numpy as np
-import numpy.typing as npt
-import scipy
+import scipy.fft
+from numpy.typing import NDArray
 
 import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT
 from fpfind.lib.constants import TSRES, PeakFindingFailed
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp
+from fpfind.lib.typing import (
+    Complex_,
+    Float,
+    Integer,
+    PathLike,
+    TimestampArray,
+)
 
 # Create alias to external dependency for fast histogramming
 try:
-    from S15lib.g2lib.g2lib import histogram  # noqa: F401
+    from S15lib.g2lib.g2lib import histogram  # noqa: F401 # type: ignore
 except ModuleNotFoundError:
     pass
 
 logger, log = logging.get_logger("fpfind")
 
 inbuilt_round = round
+
+# T = TypeVar("T", bound=np.number)
 
 
 def round(number, ndigits=None, sf=None, dp=None):
@@ -76,44 +84,55 @@ def get_overlap(*arrays):
 
 @dataclass
 class PeakStatistics:
-    signal: list
-    background: list
+    signal: NDArray[np.number]
+    background: NDArray[np.number]
+
+    def has_signal(self):
+        return len(self.signal) != 0
+
+    def has_background(self):
+        return len(self.background) != 0
+
+    def has_data(self):
+        return self.has_signal() and self.has_background()
 
     @property
     def max(self):
-        if len(self.signal) == 0:
+        if not self.has_signal():
             return None
         return np.max(self.signal)
 
     @property
     def mean(self):
-        if len(self.background) == 0:
+        if not self.has_background():
             return None
-        return np.mean(self.background)
+        return np.mean(self.background)  # type: ignore (not checked, TODO)
 
     @property
     def stdev(self):
-        if len(self.background) == 0:
+        if not self.has_background():
             return None
-        return np.std(self.background)
+        return np.std(self.background)  # type: ignore (not checked, TODO)
 
     @property
     def total(self):
-        if len(self.signal) == 0:
+        if not self.has_data():
             return None
-        return sum(self.signal) - len(self.signal) * self.mean
+        return sum(self.signal) - len(self.signal) * self.mean  # type: ignore (None accounted for)
 
     @property
     def significance(self):
         if self.stdev == 0:
             return 0
-        return round((self.max - self.mean) / self.stdev, 3)
+        if not self.has_data():
+            return None
+        return round((self.max - self.mean) / self.stdev, 3)  # type: ignore (None accounted for)
 
     @property
     def significance_raw(self):
         if self.stdev == 0:
             return None
-        full = np.hstack(self.signal, self.background)
+        full = np.hstack(self.signal, self.background)  # type: ignore (not checked)
         return (np.max(full) - np.mean(full)) / np.std(full)
 
     @property
@@ -121,30 +140,32 @@ class PeakStatistics:
         if self.stdev == 0:
             return None
         # Estimate stdev after grouping in bins of 'len(signal)'
-        length = (len(self.background) // len(self.signal)) * len(self.signal)
-        if length == 0:
+        if not self.has_signal():
             return None
+        length = (len(self.background) // len(self.signal)) * len(self.signal)
         rebinned = np.sum(
             self.background[:length].reshape(-1, len(self.signal)), axis=1
         )
         stdev = np.std(rebinned)
         if stdev == 0:
             return None
-        return round(self.total / stdev, 3)
+        return round(self.total / stdev, 3)  # type: ignore (None accounted for)
 
     @property
     def g2(self):
+        if self.mean is None or self.max is None:
+            return None
         if self.mean == 0:
             return None
         return self.max / self.mean
 
 
 def get_statistics(
-    hist: list,
-    resolution: Optional[float] = None,
-    center: Optional[float] = None,
-    window: float = 0.0,
-):
+    hist: NDArray[np.number],
+    resolution: Optional[Float] = None,
+    center: Optional[Float] = None,
+    window: Float = 0.0,
+) -> PeakStatistics:
     """Returns statistics of histogram, after performing cross-correlation.
 
     Args:
@@ -189,12 +210,11 @@ def get_statistics(
     return PeakStatistics(signal, background)
 
 
-@typing.no_type_check
 def generate_fft(
-    arr: list,
-    num_bins: int,
-    time_res: float,
-):
+    arr: TimestampArray,
+    num_bins: Integer,
+    time_res: Float,
+) -> NDArray[np.complex128]:
     """Returns the FFT and frequency resolution for the set of timestamps.
 
     Assumes the inputs are real-valued, i.e. the FFT output is symmetrical.
@@ -211,10 +231,14 @@ def generate_fft(
     if len(arr) == 0:
         raise ValueError("Array is empty!")
     bin_arr = np.bincount(np.int32((arr // time_res) % num_bins), minlength=num_bins)
-    return scipy.fft.rfft(bin_arr)
+    return scipy.fft.rfft(bin_arr)  # type: ignore (dispatchable)
 
 
-def get_xcorr(afft: list, bfft: list, filter: Optional[list] = None):
+def get_xcorr(
+    afft: NDArray[Complex_],
+    bfft: NDArray[Complex_],
+    filter: Optional[NDArray[np.number]] = None,
+) -> NDArray[np.float64]:
     """Returns the cross-correlation.
 
     Note:
@@ -225,10 +249,10 @@ def get_xcorr(afft: list, bfft: list, filter: Optional[list] = None):
     if filter is not None:
         fft = fft * filter
     result = scipy.fft.irfft(fft)
-    return np.abs(result)
+    return np.abs(result)  # type: ignore (dispatchable)
 
 
-def convert_histogram_fft(hist: list, time_bins: list):
+def convert_histogram_fft(hist: NDArray[np.number], time_bins: NDArray[np.number]):
     """Adjust axes to estimate position."""
     hlen = len(hist) // 2
     hist = np.hstack((hist[hlen:], hist[:hlen]))
@@ -237,8 +261,8 @@ def convert_histogram_fft(hist: list, time_bins: list):
 
 
 def get_timing_delay_fft(
-    hist: list,
-    time_bins: npt.NDArray[np.number],
+    hist: NDArray[np.number],
+    time_bins: NDArray[np.number],
     include_negative: bool = False,
 ) -> Tuple[np.signedinteger, np.signedinteger]:
     """Returns the timing delay.
@@ -264,7 +288,9 @@ def get_timing_delay_fft(
     return result
 
 
-def get_delay_at_index_fft(time_bins: list, pos: int):
+def get_delay_at_index_fft(
+    time_bins: NDArray[np.number], pos: Integer
+) -> Tuple[np.number, np.number]:
     assert pos >= 0
     pos2 = len(time_bins) - pos if pos != 0 else 0  # corner case
     ptime = time_bins[pos]
@@ -273,7 +299,9 @@ def get_delay_at_index_fft(time_bins: list, pos: int):
     return result
 
 
-def get_top_k_delays_fft(hist: list, time_bins: list, k: int):
+def get_top_k_delays_fft(
+    hist: NDArray[np.number], time_bins: NDArray[np.number], k: Integer
+):
     assert k >= 1
     if k == 1:
         return [get_delay_at_index_fft(time_bins, np.argmax(hist))]
@@ -289,10 +317,11 @@ def get_top_k_delays_fft(hist: list, time_bins: list, k: int):
 
 
 def slice_timestamps(
-    ts: npt.NDArray[np.number],
-    start: Union[float, None] = None,
-    duration: Union[float, None] = None,
-) -> npt.NDArray[np.number]:
+    ts: TimestampArray,
+    start: Union[Float, None] = None,
+    duration: Union[Float, None] = None,
+) -> TimestampArray:
+    dtype = ts.dtype
     if start is not None:
         ts = ts - start  # note: 'ts -= start' is in-place
         ts = ts[ts >= 0]
@@ -301,7 +330,7 @@ def slice_timestamps(
     if duration is not None:
         if len(ts) == 0:
             warnings.warn("No data available.")
-            return []
+            return np.array([], dtype=dtype)
         if duration >= ts[-1]:
             warnings.warn(
                 f"Desired duration ({duration * 1e-9:.3f} s) is longer "
@@ -312,17 +341,17 @@ def slice_timestamps(
 
 
 def histogram_fft(  # noqa: PLR0913
-    alice: list,
-    bob: list,
-    num_bins: int,
-    resolution: float = 1,
-    num_wraps: int = 1,
-    acq_start: Optional[float] = None,
-    freq_corr: float = 0.0,
-    filter: Optional[list] = None,
+    alice: TimestampArray,
+    bob: TimestampArray,
+    num_bins: Integer,
+    resolution: Float = 1,
+    num_wraps: Integer = 1,
+    acq_start: Optional[Float] = None,
+    freq_corr: Float = 0.0,
+    filter: Optional[NDArray[np.number]] = None,
     statistics: bool = False,
-    center: Optional[float] = None,
-    window: float = 0.0,
+    center: Optional[Float] = None,
+    window: Float = 0.0,
 ):
     """Returns the cross-correlation histogram.
 
@@ -352,8 +381,8 @@ def histogram_fft(  # noqa: PLR0913
     bob = bob * (1 + freq_corr)
 
     # Generate FFT
-    afft, alen = generate_fft(alice, num_bins, resolution, 0, duration)
-    bfft, blen = generate_fft(bob, num_bins, resolution, 0, duration)
+    afft, alen = generate_fft(alice, num_bins, resolution)  # TODO: Check if correct
+    bfft, blen = generate_fft(bob, num_bins, resolution)  # TODO: Check if correct
     result = get_xcorr(afft, bfft, filter)
     bins = np.arange(num_bins) * resolution
     if statistics:
@@ -405,10 +434,10 @@ class ArgparseCustomFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 def get_first_overlapping_epoch(
-    dir1,
-    dir2,
-    first_epoch=None,
-    return_length=False,
+    dir1: PathLike,
+    dir2: PathLike,
+    first_epoch: Optional[Union[str, bytes]] = None,
+    return_length: bool = False,
 ):
     """Get epoch name of smallest overlapping epoch.
 
@@ -441,7 +470,9 @@ def get_first_overlapping_epoch(
     return min_epoch
 
 
-def iterate_epochs(epoch, length: int = None, step: int = 1):
+def iterate_epochs(
+    epoch: Union[str, bytes], length: Optional[int] = None, step: int = 1
+):
     """Stream incremental epoch names, starting from specified epoch.
 
     Mainly as a convenience function. This is a generator, so it
@@ -471,7 +502,13 @@ def iterate_epochs(epoch, length: int = None, step: int = 1):
             epochint += step
 
 
-def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
+def get_timestamp(
+    dirname: PathLike,
+    file_type: str,
+    first_epoch: Union[str, bytes],
+    skip_epoch: int,
+    num_of_epochs: int,
+):
     epochdir = pathlib.Path(dirname)
     timestamp = np.array([], dtype=NP_PRECISEFLOAT)
     for i in range(num_of_epochs):
@@ -481,7 +518,13 @@ def get_timestamp(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
     return timestamp
 
 
-def get_timestamp_pattern(dirname, file_type, first_epoch, skip_epoch, num_of_epochs):
+def get_timestamp_pattern(
+    dirname: PathLike,
+    file_type: str,
+    first_epoch: Union[str, bytes],
+    skip_epoch: int,
+    num_of_epochs: int,
+):
     epochdir = pathlib.Path(dirname)
     timestamp = np.array([], dtype=NP_PRECISEFLOAT)
     patterns = np.array([], dtype=np.int64)
@@ -494,7 +537,9 @@ def get_timestamp_pattern(dirname, file_type, first_epoch, skip_epoch, num_of_ep
     return timestamp, patterns
 
 
-def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
+def normalize_timestamps(
+    *T: TimestampArray, skip: float = 0.0, preserve_relative: bool = True
+):
     """Shifts timestamp arrays to reference zero.
 
     Args:
@@ -503,14 +548,14 @@ def normalize_timestamps(*T, skip: float = 0.0, preserve_relative: bool = True):
         preserve_relative: Preserve relative durations between arrays.
     """
     if not preserve_relative:
-        T = [slice_timestamps(ts) for ts in T]
+        T = tuple(slice_timestamps(ts) for ts in T)
 
     start_time = max([ts[0] for ts in T]) + skip * 1e9  # units of ns
-    T = [slice_timestamps(ts, start_time) for ts in T]
+    T = tuple(slice_timestamps(ts, start_time) for ts in T)
     return T
 
 
-def parse_docstring_description(docstring):
+def parse_docstring_description(docstring: str) -> str:
     placeholder = "~~~PLACEHOLDER~~~"
     # Remove all annotated sections, including changelog
     d, *_ = re.split(r"\n[a-zA-Z0-9\s]+:\n", docstring)
@@ -522,7 +567,12 @@ def parse_docstring_description(docstring):
     return d
 
 
-def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
+def timestamp2epoch(
+    filename: PathLike,
+    resolution: TSRES = TSRES.PS4,
+    legacy: bool = False,
+    full: bool = False,
+) -> str:
     (t,), _ = read_a1_kth_timestamp(
         filename,
         [0],
@@ -541,15 +591,15 @@ def timestamp2epoch(filename, resolution=TSRES.PS4, legacy=False, full=False):
     return int2epoch(epochint)
 
 
-def xcorr(abs, bbs):
+def xcorr(abs: NDArray[np.number], bbs: NDArray[np.number]):
     """Performs the main cross-correlation routine."""
-    afft = scipy.fft.rfft(abs)
-    bfft = scipy.fft.rfft(bbs)
+    afft: NDArray[Complex_] = scipy.fft.rfft(abs)  # type: ignore (dispatchable)
+    bfft: NDArray[Complex_] = scipy.fft.rfft(bbs)  # type: ignore (dispatchable)
     ys = get_xcorr(afft, bfft)
     return ys
 
 
-def xcorr_process(abs, bbs):
+def xcorr_process(abs: NDArray[np.number], bbs: NDArray[np.number]):
     """Runs 'xcorr()' in a separate process for interruptible FFT.
 
     Note:
@@ -573,12 +623,11 @@ def xcorr_process(abs, bbs):
         raise
 
 
-@typing.no_type_check
 def generate_fft_bins(
-    arr: list,
-    num_bins: int,
-    time_res: float,
-):
+    arr: TimestampArray,
+    num_bins: Integer,
+    time_res: Float,
+) -> NDArray[np.signedinteger]:
     if len(arr) == 0:
         raise ValueError("Array is empty!")
     bin_arr = np.bincount(np.int32((arr // time_res) % num_bins), minlength=num_bins)
@@ -586,17 +635,17 @@ def generate_fft_bins(
 
 
 def histogram_fft2(
-    ats,
-    bts,
-    start,
-    duration,
-    N,
-    r,
+    ats: TimestampArray,
+    bts: TimestampArray,
+    start: Optional[Float],
+    duration: Optional[Float],
+    N: Integer,
+    r: Float,
     interruptible: bool = False,
 ):
     """Convenience function that wraps histogram routines."""
-    ats_early = slice_timestamps(ats, start, duration)
-    bts_early = slice_timestamps(bts, start, duration)
+    ats_early: TimestampArray = slice_timestamps(ats, start, duration)
+    bts_early: TimestampArray = slice_timestamps(bts, start, duration)
     abs = generate_fft_bins(ats_early, N, r)
     bbs = generate_fft_bins(bts_early, N, r)
     _xcorr = xcorr_process if interruptible else xcorr
@@ -609,7 +658,9 @@ def histogram_fft2(
     return xs, ys
 
 
-def fold_histogram(xs, ys, binning_factor=2):
+def fold_histogram(
+    xs: NDArray[np.number], ys: NDArray[np.number], binning_factor: int = 2
+) -> Tuple[NDArray[np.number], NDArray[np.number]]:
     xs = xs[::binning_factor]
     ys = np.sum(ys.reshape(-1, binning_factor), axis=1)
     return xs, ys
@@ -621,13 +672,13 @@ class CoarseHistogramStrategy(enum.Enum):
 
 
 def histogram_fft3(
-    ats,
-    bts,
-    start,
-    duration,
-    num_bins,
-    resolution,
-    max_duration,
+    ats: TimestampArray,
+    bts: TimestampArray,
+    start: Optional[Float],
+    duration: Float,
+    num_bins: Integer,
+    resolution: Float,
+    max_duration: Float,
     strategy: CoarseHistogramStrategy = CoarseHistogramStrategy.RESOLUTION,
     interruptible: bool = False,
 ):
