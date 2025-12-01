@@ -777,7 +777,7 @@ def main():
     # Default level should be DEBUG (instead of WARNING) for better
     # accessibility to the tool. '--verbosity' kept for legacy reasons.
     if args.quiet > 0:
-        verbosity = max(2 - args.quiet, 0)
+        verbosity = max(2 - args.quiet, -1)
     elif args.verbosity == 0:
         verbosity = 2
     else:

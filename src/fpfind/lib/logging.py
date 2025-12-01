@@ -2,6 +2,7 @@ import sys
 import traceback
 from logging import (
     DEBUG,
+    ERROR,
     INFO,
     WARNING,
     FileHandler,
@@ -172,9 +173,13 @@ def set_logfile(logger, path):
 
 
 def set_verbosity(logger, verbosity):
-    levels = [WARNING, INFO, DEBUG]
-    verbosity = min(verbosity, len(levels) - 1)
-    logger.setLevel(levels[verbosity])
+    if verbosity == -1:  # override to maintain compatibility with --verbosity
+        level = ERROR
+    else:
+        levels = [WARNING, INFO, DEBUG]
+        verbosity = min(verbosity, len(levels) - 1)
+        level = levels[verbosity]
+    logger.setLevel(level)
 
 
 DEFAULT_FORMATTER = LoggingOverrideFormatter(
