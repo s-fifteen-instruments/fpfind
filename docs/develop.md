@@ -19,13 +19,11 @@ The additional `pytest` dependency will need to be specified because `uv` does n
 Add `pytest-cov` for code coverage and `pytest-xdist` for parallel test execution mode:
 
 ```bash
-uv run --python 3.8 --isolated --with . --with pytest --with pytest-cov --with pytest-xdist pytest --cov=fpfind -n auto
+uv run --python 3.8 --isolated --with-editable . --with pytest --with pytest-cov --with pytest-xdist pytest --cov=fpfind -n auto
 ```
 
 ## Lock files
 
-Lock files can be generated in Poetry with `poetry lock` and uv with `uvx migrate-to-uv; uv lock`.
+Lock files can be generated in Poetry with `poetry lock` and uv with `uvx migrate-to-uv; uv lock`. For convenience, the latter is provided as a script in `scripts/generate-uv-lock.sh`.
 
-These lock files however should not be committed to version control: differences in build will likely occur due to different build platforms, which can be a PITA to resolve (e.g. see this [SO answer](https://stackoverflow.com/a/61076546)).
-
-Instead, build the library during CI and archive the generated lockfile as a build artifact. This allows for reproducible builds and easier rollbacks if something breaks. TODO!
+These lock files however should not be committed to version control: differences in build will likely occur due to different build platforms, which can be a PITA to resolve (e.g. see this [SO answer](https://stackoverflow.com/a/61076546)). Instead, we build the library during CI and archive the generated lockfile as a build artifact (these can be found in the [individual CI workflow](https://github.com/s-fifteen-instruments/fpfind/actions)). This allows for reproducible builds and easier rollbacks when something breaks.
