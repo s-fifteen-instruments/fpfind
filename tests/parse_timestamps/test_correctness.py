@@ -34,10 +34,13 @@ def test_read_equivalence_1ns(path_timestamp_a0, path_timestamp_a1, path_timesta
     ts0, ps0 = parser.read_a0(path_timestamp_a0)
     ts1, ps1 = parser.read_a1(path_timestamp_a1, legacy=True)
     ts2, ps2 = parser.read_a2(path_timestamp_a2)
+    ts1b, ps1b = parser.read_a1(path_timestamp_a1, legacy=True, buffer_size=None)
     assert np.allclose(ts0, ts1, rtol=rtol, atol=0)
     assert np.allclose(ts0, ts2, rtol=rtol, atol=0)
+    assert np.allclose(ts0, ts1b, rtol=rtol, atol=0)
     assert np.all(ps0 == ps1)
     assert np.all(ps0 == ps2)
+    assert np.all(ps0 == ps1b)
 
 
 def test_read_equivalence_4ps(path_timestamp_a0, path_timestamp_a1, path_timestamp_a2):
