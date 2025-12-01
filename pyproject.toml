@@ -95,5 +95,4 @@ include = ["src"]
 exclude = [
     "src/fpfind/apps",
 ]
-pythonVersion = "3.8"
 typeCheckingMode = "standard"
