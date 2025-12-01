@@ -39,7 +39,7 @@ from fpfind.lib.constants import (
     PeakFindingFailed,
 )
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
-from fpfind.lib.typing import TimestampArray
+from fpfind.lib.typing import Float, TimestampArray
 from fpfind.lib.utils import (
     ArgparseCustomFormatter,
     fold_histogram,
@@ -123,8 +123,8 @@ def time_freq(
     )
 
     # Refinement loop, note resolution/duration will change during loop
-    dt = 0
-    f = 1
+    dt: Float = 0.0
+    f: Float = 1.0
     iter = 1
     perform_coarse_finding = True
     prev_dt1 = 0  # cached dt1 (not _dt1!)
@@ -412,7 +412,9 @@ def time_freq(
         max_dt1 = max(abs(dt1), abs(_dt1))
         if max_dt1 != 0:
             prev_dt1 = max_dt1
-        bts = (bts - dt1) / (1 + df1)
+        bts -= dt1
+        if df1 != 0:
+            bts /= np.float128(1 + df1)
         r = max(r / convergence_rate, r_target)
         iter += 1
         perform_coarse_finding = False  # disable coarse search, i.e. iter > 1
