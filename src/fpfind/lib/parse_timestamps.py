@@ -887,6 +887,7 @@ def print_statistics_report(
     the latter.
     """
 
+    num_events = int(num_events)
     print(f"Name: {str(filename)}")
     if pathlib.Path(filename).is_file():
         filesize = pathlib.Path(filename).stat().st_size / (1 << 20)
@@ -898,7 +899,8 @@ def print_statistics_report(
     if num_events != 0:
         if start_timestamp is None or end_timestamp is None or patterns is None:
             return
-        duration = (end_timestamp - start_timestamp) * 1e-9
+        num_detections = int(num_detections)
+        duration = float((end_timestamp - start_timestamp) * 1e-9)
         print(f"  Detections    : {num_detections:>{width}d}")
         print(f"  Channel 1     : {ch1_counts:>{width}d}")
         print(f"  Channel 2     : {ch2_counts:>{width}d}")
@@ -988,7 +990,7 @@ def get_pattern_mask(
     else:
         # Set bit 4 to indicate dummy events, since
         # non-events already do not contain the bit pattern
-        _p = np.where(p == 0, 16, p)
+        _p: DetectorArray = np.where(p == 0, 16, p)
         _p = _p ^ (_p & pattern)  # patterns with bitmask removed
         pmask = _p != 0
         masked = _p[pmask]  # return detector patterns after masking
