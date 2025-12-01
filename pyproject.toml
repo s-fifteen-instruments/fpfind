@@ -88,7 +88,6 @@ ignore = [
 [tool.pyright]
 include = ["src"]
 exclude = [
-    "src/fpfind/lib",
     "src/fpfind/apps",
 ]
 pythonVersion = "3.8"

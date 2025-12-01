@@ -39,6 +39,7 @@ from fpfind.lib.constants import (
     PeakFindingFailed,
 )
 from fpfind.lib.parse_timestamps import read_a1, read_a1_start_end
+from fpfind.lib.typing import TimestampArray
 from fpfind.lib.utils import (
     ArgparseCustomFormatter,
     fold_histogram,
@@ -71,8 +72,8 @@ NDArrayNumber: TypeAlias = npt.NDArray[np.number]
 
 # Main algorithm
 def time_freq(
-    ats: NDArrayNumber,
-    bts: NDArrayNumber,
+    ats: TimestampArray,
+    bts: TimestampArray,
     k0: int,
     N: int,
     r0: float,
@@ -426,8 +427,8 @@ def time_freq(
 
 
 def fpfind(
-    alice: NDArrayNumber,
-    bob: NDArrayNumber,
+    alice: TimestampArray,
+    bob: TimestampArray,
     num_wraps: int,
     num_bins: int,
     resolution: float,
@@ -856,7 +857,7 @@ def main():
         first_epoch, available_epochs = get_first_overlapping_epoch(
             args.sendfiles, args.t1files,
             first_epoch=args.first_epoch, return_length=True,
-        )  # type: ignore
+        )  # type: ignore (return_length returns two items)
         log(1).debug(
             "",
             f"Available: {available_epochs:d} epochs "
@@ -865,6 +866,9 @@ def main():
         )
         if available_epochs < required_epochs:
             log(1).warning("Insufficient epochs")
+        if first_epoch is None:
+            log(1).error("No valid epochs available")
+            sys.exit(1)
 
         # Read epochs
         alice, aps = get_timestamp_pattern(

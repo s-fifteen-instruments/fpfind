@@ -18,6 +18,7 @@ from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, r
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp
 from fpfind.lib.typing import (
     Complex_,
+    DetectorArray,
     Float,
     Integer,
     PathLike,
@@ -87,7 +88,7 @@ class PeakStatistics:
         if self.stdev == 0:
             return 0
         if not self.has_data():
-            return None
+            return 0
         return round((self.max - self.mean) / self.stdev, 3)  # type: ignore (None accounted for)
 
     @property
@@ -486,10 +487,10 @@ def get_timestamp_pattern(
     first_epoch: Union[str, bytes],
     skip_epoch: int,
     num_of_epochs: int,
-):
+) -> Tuple[TimestampArray, DetectorArray]:
     epochdir = pathlib.Path(dirname)
     timestamp = np.array([], dtype=NP_PRECISEFLOAT)
-    patterns = np.array([], dtype=np.int64)
+    patterns = np.array([], dtype=np.uint32)
     reader = read_T1 if file_type == "T1" else read_T2
     for i in range(num_of_epochs):
         epoch_name = epochdir / int2epoch(epoch2int(first_epoch) + skip_epoch + i)
@@ -517,7 +518,10 @@ def normalize_timestamps(
     return T
 
 
-def parse_docstring_description(docstring: str) -> str:
+def parse_docstring_description(docstring: Optional[str]) -> str:
+    if docstring is None:
+        return ""
+
     placeholder = "~~~PLACEHOLDER~~~"
     # Remove all annotated sections, including changelog
     d, *_ = re.split(r"\n[a-zA-Z0-9\s]+:\n", docstring)
