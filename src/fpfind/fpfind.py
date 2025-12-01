@@ -50,7 +50,6 @@ from fpfind.lib.utils import (
     match_dts,
     normalize_timestamps,
     parse_docstring_description,
-    round,
 )
 
 logger, log = logging.get_logger("fpfind")

@@ -32,44 +32,6 @@ except ModuleNotFoundError:
 
 logger, log = logging.get_logger("fpfind")
 
-inbuilt_round = round
-
-# T = TypeVar("T", bound=np.number)
-
-
-def round(number, ndigits=None, sf=None, dp=None):
-    """Stand-in replacement for in-built round, adapted from [1].
-
-    Signature of in-build round is (number, ndigits=None). The 'dp' keyword
-    is introduced as an alias to 'ndigits', as a counterpart to the 'sf'
-    keyword representing the number of significant figures to use.
-
-    Only one of the precision arguments, i.e. 'ndigits', 'sf', 'dp', should
-    be supplied, otherwise the behaviour will be undefined.
-
-    References:
-        [1]: Original source, <https://stackoverflow.com/a/48812729>
-        [2]: Rounding as vallue, <https://stackoverflow.com/a/59888924>
-    """
-    # 'dp' overrides 'ndigits' keyword
-    if ndigits is not None and dp is None:
-        dp = ndigits
-
-    # Assume regular rounding behaviour if 'sf' not supplied
-    if sf is None:
-        return inbuilt_round(number, dp)
-
-    # Perform rounding
-    x = np.asarray(number)
-    x_positive = np.where(np.isfinite(x) & (x != 0), np.abs(x), 10 ** (sf - 1))
-    mags = 10 ** (sf - 1 - np.floor(np.log10(x_positive)))
-    return inbuilt_round(np.round(x * mags) / mags)
-
-    intermediate = float("{:.{p}g}".format(number, p=sf))
-    if isinstance(number, int):
-        return int(intermediate)  # preserve as int even when very large
-    return "{:.{p}g}".format(intermediate, p=sf)
-
 
 def get_overlap(*arrays):
     """Returns right-truncated arrays of largest possible common length.
@@ -273,7 +235,7 @@ def get_timing_delay_fft(
 
     Example:
         >>> get_timing_delay_fft([1,3,0,1], [2,4,6,8])
-        ()
+        (4, -8)
 
     """
     # [0, 1, 2, 3]  -->  (0, -4)
