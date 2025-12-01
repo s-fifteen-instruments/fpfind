@@ -1,5 +1,3 @@
-files: 'src'
-exclude: '^src/fpfind/apps'
 default_install_hook_types: [pre-commit, commit-msg]
 repos:
   - repo: https://github.com/compilerla/conventional-pre-commit
@@ -13,13 +11,18 @@ repos:
     rev: v0.12.12
     hooks:
       - id: ruff-check
+        files: 'src'
+        exclude: '^src/fpfind/apps'
         stages: [pre-commit]
         args: [--fix]
       - id: ruff-format
+        files: 'src'
+        exclude: '^src/fpfind/apps'
         stages: [pre-commit]
 
   - repo: https://github.com/DetachHead/basedpyright-prek-mirror
     rev: 1.32.1
     hooks:
       - id: basedpyright
+        files: 'src'
         stages: [pre-commit]
