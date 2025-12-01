@@ -2,12 +2,12 @@
 src/fpfind/freqcd_path
 docs/plantuml*
 
-# Compiled python files
-**/__pycache__
-**/.pytest_cache
-
-# poetry-related files
-poetry.lock
-
-# IDE
+# Local environment / tempfiles
+__pycache__
+.pytest_cache
+.ruff_cache
+.coverage
 .vscode
+.venv
+poetry.lock
+uv.lock
