@@ -23,7 +23,7 @@ import numpy as np
 
 from fpfind.lib import parse_epochs as eparser
 from fpfind.lib.constants import EPOCH_DURATION
-from fpfind.lib.utils import parse_docstring_description, ArgparseCustomFormatter
+from fpfind.lib.utils import ArgparseCustomFormatter, parse_docstring_description
 
 _LOGGING_FMT = "{asctime}\t{levelname:<7s}\t{funcName}:{lineno}\t| {message}"
 logger = logging.getLogger(__name__)
@@ -37,10 +37,11 @@ if not logger.handlers:
 
 # Conversion factors for frequency units, i.e. 2^-34 <-> 1e-10
 FCORR_DTOB = (1 << 34) / 10_000_000_000
-FCORR_BTOD = 1/FCORR_DTOB
+FCORR_BTOD = 1 / FCORR_DTOB
 
 # Container to hold previously servoed time differences
 DT_HISTORY = []
+
 
 def parse(line, format=None):
     """Reads costream stdout and returns epoch and servoed time.
@@ -74,6 +75,7 @@ def parse(line, format=None):
         raise ValueError(f"Unrecognised costream format: '{format}'")
     logger.debug("Successfully parsed epoch = %s, dt = %.3f ns", epoch, dt)
     return epoch, dt
+
 
 def evaluate_freqshift(epoch, dt, ignore=5, average=3, separation=12, cap=100e-9):
     """Returns desired clock skew correction, in absolute units.
@@ -137,7 +139,7 @@ def evaluate_freqshift(epoch, dt, ignore=5, average=3, separation=12, cap=100e-9
     dt_late = np.mean(dts[-average:])
     dt_change = (dt_late - dt_early) * 1e-9  # convert to seconds
     df = dt_change / (separation * EPOCH_DURATION)
-    df_toapply = 1/(1 + df) - 1  # note: equal to -df ~ 1e-10 if df**2 < 0.5e-10
+    df_toapply = 1 / (1 + df) - 1  # note: equal to -df ~ 1e-10 if df**2 < 0.5e-10
     DT_HISTORY.clear()  # restart collection
 
     # Cap correction if positive value supplied
@@ -147,9 +149,12 @@ def evaluate_freqshift(epoch, dt, ignore=5, average=3, separation=12, cap=100e-9
 
     logger.info(
         "Correction: %5.1f ppb (%5.1f ppb @ %s)",
-        df_applied*1e9, df_toapply*1e9, epochs[-1],
+        df_applied * 1e9,
+        df_toapply * 1e9,
+        epochs[-1],
     )
     return df_applied
+
 
 def main():
     script_name = Path(sys.argv[0]).name
@@ -161,6 +166,7 @@ def main():
         add_help=False,
     )
 
+    # fmt: off
     # Boilerplate
     pgroup_config = parser.add_argument_group("display/configuration")
     pgroup_config.add_argument(
@@ -220,6 +226,7 @@ def main():
     pgroup.add_argument(
         "-u", action="store_true",
         help="freqcd in 'update mode' (default: False)")
+    # fmt: on
 
     # Parse arguments
     args = parser.parse_args()
@@ -235,7 +242,7 @@ def main():
         handler.setFormatter(
             logging.Formatter(
                 fmt=_LOGGING_FMT,
-                    datefmt="%Y%m%d_%H%M%S",
+                datefmt="%Y%m%d_%H%M%S",
                 style="{",
             )
         )
@@ -243,7 +250,7 @@ def main():
 
     # Set logging level
     levels = [logging.WARNING, logging.INFO, logging.DEBUG]
-    verbosity = min(args.verbosity, len(levels)-1)
+    verbosity = min(args.verbosity, len(levels) - 1)
     logger.setLevel(levels[verbosity])
     logger.debug("%s", args)
 
@@ -252,18 +259,17 @@ def main():
     assert args.a > 0
     assert args.s > 0
 
+    # Open relevant I/O pipes
+    cin = sys.stdin
+    if args.n is not None:
+        cin = open(args.n, "r")
+
+    cout = sys.stdout
+    if args.F is not None:
+        cout = open(args.F, "w")
+
     # Mainloop
     try:
-        # Open relevant I/O pipes
-        if args.n is not None:
-            cin = open(args.n, "r")
-        else:
-            cin = sys.stdin
-        if args.F is not None:
-            cout = open(args.F, "w")
-        else:
-            cout = sys.stdout
-
         # Set initial frequency difference
         df = args.f
         if not args.d:
@@ -283,8 +289,12 @@ def main():
             if args.e:
                 print(line, end="", file=sys.stderr)
             df1 = evaluate_freqshift(
-                epoch, dt,
-                ignore=args.i, average=args.a, separation=args.s, cap=args.c,
+                epoch,
+                dt,
+                ignore=args.i,
+                average=args.a,
+                separation=args.s,
+                cap=args.c,
             )
             if df1 is None:
                 logger.debug("No changes to frequency submitted.")
@@ -296,7 +306,7 @@ def main():
             if args.u:
                 df = df1
             else:
-                df = (1 + df)*(1 + df1) - 1
+                df = (1 + df) * (1 + df1) - 1
 
             # Convert and write new frequency
             _df = df * 1e10  # convert 1 -> 0.1ppb
@@ -305,17 +315,19 @@ def main():
             _df = round(_df)
             logger.debug("Wrote '%d' to output", _df)
             cout.write(f"{_df}\n")
+
+            # Alternatively, use 'open(pipe, "wb", 0)'
             cout.flush()  # necessary to avoid trapping df in buffer
-                          # alternatively, use 'open(pipe, "wb", 0)'
 
     except KeyboardInterrupt:
         logger.debug("User interrupted.")
 
     finally:
-        if args.n is not None:
+        if cin is not sys.stdin:
             cin.close()
-        if args.F is not None:
+        if cout is not sys.stdout:
             cout.close()
+
 
 if __name__ == "__main__":
     main()

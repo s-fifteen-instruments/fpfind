@@ -84,6 +84,11 @@ ignore = [
     "PLR0915",  # too many statements
     "PLW0603",  # global variables - needs eventual refactoring
 ]
+"src/fpfind/freqservo.py" = [
+    "E501",     # line length
+    "PLR0912",  # too many branches
+    "PLR0915",  # too many statements
+]
 
 [tool.pyright]
 include = ["src"]
