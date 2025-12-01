@@ -1,10 +1,18 @@
-import logging
 import sys
 import traceback
+from logging import (
+    DEBUG,
+    INFO,
+    WARNING,
+    FileHandler,
+    Formatter,
+    StreamHandler,
+    getLogger,
+)
 from types import SimpleNamespace
 
 
-class LoggingOverrideFormatter(logging.Formatter):
+class LoggingOverrideFormatter(Formatter):
     """Supports injection of overrides during logging.
 
     The following attributes are injectable: '_funcname', '_filename',
@@ -116,10 +124,10 @@ class LoggingOverrideFormatter(logging.Formatter):
 
 
 def get_logger(name):
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.WARNING)  # default logging level
+    logger = getLogger(name)
+    logger.setLevel(WARNING)  # default logging level
     if not logger.handlers:
-        handler = logging.StreamHandler(stream=sys.stderr)
+        handler = StreamHandler(stream=sys.stderr)
         handler.setFormatter(DEFAULT_FORMATTER)
         logger.addHandler(handler)
         logger.propagate = False
@@ -158,13 +166,13 @@ def get_logger(name):
 
 
 def set_logfile(logger, path):
-    handler = logging.FileHandler(filename=path, mode="w")
+    handler = FileHandler(filename=path, mode="w")
     handler.setFormatter(DEFAULT_FORMATTER)
     logger.addHandler(handler)
 
 
 def set_verbosity(logger, verbosity):
-    levels = [logging.WARNING, logging.INFO, logging.DEBUG]
+    levels = [WARNING, INFO, DEBUG]
     verbosity = min(verbosity, len(levels) - 1)
     logger.setLevel(levels[verbosity])
 

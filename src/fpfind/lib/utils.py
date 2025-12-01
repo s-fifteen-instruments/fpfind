@@ -11,8 +11,8 @@ import numpy as np
 import scipy.fft
 from numpy.typing import NDArray
 
-import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT
+from fpfind.lib import logging
 from fpfind.lib.constants import TSRES, PeakFindingFailed
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp

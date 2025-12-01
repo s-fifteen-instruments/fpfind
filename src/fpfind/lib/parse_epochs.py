@@ -20,8 +20,8 @@ from typing import BinaryIO, List, NamedTuple, Optional, Tuple, Union
 import numpy as np
 from numpy.typing import NDArray
 
-import fpfind.lib._logging as logging
 from fpfind import NP_PRECISEFLOAT, TSRES
+from fpfind.lib import logging
 from fpfind.lib.typing import DetectorArray, Integer, PathLike, TimestampArray
 
 logger, log = logging.get_logger(__name__)

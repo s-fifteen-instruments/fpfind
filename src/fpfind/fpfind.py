@@ -28,8 +28,8 @@ import numpy as np
 import numpy.typing as npt
 from typing_extensions import TypeAlias
 
-import fpfind.lib._logging as logging
 from fpfind import VERSION
+from fpfind.lib import logging
 from fpfind.lib.constants import (
     EPOCH_LENGTH,
     MAX_FCORR,
