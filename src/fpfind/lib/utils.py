@@ -194,7 +194,7 @@ def generate_fft(
     if len(arr) == 0:
         raise ValueError("Array is empty!")
     bin_arr = np.bincount(np.int32((arr // time_res) % num_bins), minlength=num_bins)
-    return scipy.fft.rfft(bin_arr)  # type: ignore (dispatchable)
+    return scipy.fft.rfft(bin_arr), num_bins  # type: ignore (dispatchable)
 
 
 def get_xcorr(
