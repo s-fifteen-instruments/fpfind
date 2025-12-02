@@ -1,0 +1,61 @@
+name: Publish to PyPI
+on:
+  push:
+    tags: [ 'v[0-9]+.[0-9]+.[0-9]+' ]
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          activate-environment: "true"
+
+      # basedpyright needs editable install to pick up builds
+      - name: Install package and validate format + type-checking
+        run: |
+          uv pip install -e .
+          uvx pre-commit run --all-files
+
+      - name: Run package tests
+        run: |
+          uvx --with . pytest
+
+      - name: Generate build
+        if: ${{ matrix.python-version == '3.13' }}
+        run: |
+          uvx --from build pyproject-build
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.python-version == '3.13' }}
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish-pypi:
+    needs: test-build
+    runs-on: ubuntu-latest
+    environment:
+      name: release
+      url: https://pypi.org/p/fpfind
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
