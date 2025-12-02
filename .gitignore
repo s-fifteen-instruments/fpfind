@@ -11,3 +11,4 @@ __pycache__
 .venv
 poetry.lock
 uv.lock
+/dist

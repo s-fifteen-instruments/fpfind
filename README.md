@@ -4,21 +4,16 @@ An add-on implementation of frequency compensation for [qcrypto](https://github.
 
 ## Installation
 
+```bash
+pip3 install fpfind
+```
+
 Requirements:
 
 * Python 3.8 and above, running in Linux
 * `gcc` (if running `freqcd`, preferably in PATH for auto-compilation)
 
-The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags). For example, to install the `v3.3.2` version:
-
-```bash
-# Remote installation
-pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git@v3.3.2
-
-# Local installation
-git clone -b "v3.3.2" https://github.com/s-fifteen-instruments/fpfind.git
-cd fpfind && pip3 install .
-```
+The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags).
 
 ## Usage
 
@@ -75,9 +70,7 @@ Certain issues may appear when attempting an install on RaspbianOS:
 
 Version tags (as of **v2**) follow [romantic versioning](https://romversioning.github.io/romver/) (a variation on semantic versioning). In the SemVer language: PATCH is incremented for non-breaking changes, MINOR for breaking changes that are easy to patch downstream, and MAJOR is reserved for large breaking changes that require careful syntax adjustments.
 
-Versions also come with a build string indicating the date of release in "YYYYMMDD" format, e.g. **v2.0.0+20241024**.
-This allows clear indication to the user whether the local version is severely outdated, while maintaining the clarity of semantic versioning.
-Dynamic versioning is handled by poetry, so bumping the version simply involves adding a lightweight git tag (with "v" prepended, e.g. `git tag {VERSION} [COMMIT]`).
+Dynamic versioning is handled by poetry, so bumping the version simply involves adding a lightweight git tag (with "v" prepended, e.g. `git tag {VERSION} [COMMIT]`). Local version modifiers (e.g. dates) are removed for compatibility with PyPI rules.
 
 Commit messages to roughly follow [Angular commit message guidelines](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines) (which aligns with the [Conventional Commits specification](https://www.conventionalcommits.org/en/v1.0.0/)). The type should be one of the following: **feat**, **fix**, **chore**, **test**, **docs**, **build**, **ci**.
 If a scope is provided, it should be one of:
