@@ -9,14 +9,14 @@ Requirements:
 * Python 3.8 and above, running in Linux
 * `gcc` (if running `freqcd`, preferably in PATH for auto-compilation)
 
-The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags). For example, to install the `v2.2.x` version:
+The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags). For example, to install the `v3.3.2` version:
 
 ```bash
 # Remote installation
-pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git@v2.2.x
+pip3 install git+https://github.com/s-fifteen-instruments/fpfind.git@v3.3.2
 
 # Local installation
-git clone -b "v2.2.x" https://github.com/s-fifteen-instruments/fpfind.git
+git clone -b "v3.3.2" https://github.com/s-fifteen-instruments/fpfind.git
 cd fpfind && pip3 install .
 ```
 
@@ -35,11 +35,11 @@ freqcd -X -udF fpipe -f 568 < {TIMESTAMPS}
 [costream -V5 ... |] freqservo -V5 -udF fpipe -f 568
 ```
 
-See [Hints](./docs/hints.md) for usage hints.
+See [Hints](./docs/user/hints.md) for usage hints.
 
 ## Upgrading
 
-See [Migration](./docs/migration.md) for moving between major versions, e.g. v2 to v3.
+See [Migration](./docs/user/migration.md) for moving between major versions, e.g. v2 to v3.
 
 ## Motivation
 
