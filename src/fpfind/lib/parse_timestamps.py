@@ -50,6 +50,7 @@ Changelog:
 import argparse
 import bisect
 import io
+import os
 import pathlib
 import struct
 import sys
@@ -72,6 +73,52 @@ from fpfind.lib.typing import (
     TimestampArray,
     TimestampDetectorStream,
 )
+
+
+def stdopen(path, flags):
+    """Override open path with stdin/stdout for '-' path.
+
+    Note that stdin/stdout is read/write-only, so opening with both read
+    and write is prohibited for these standard streams. stderr is not
+    considered in this function, since stderr messages are more commonly
+    written directly instead of to a file, with downstream log applications
+    handling file redirections.
+
+    Example:
+        # Regular 'open()' usage
+        >>> open("file.txt", "r", opener=stdopen)  # read
+        >>> open("file.txt", "wb", opener=stdopen)  # binary write
+        >>> open("file.txt", "a", opener=stdopen)  # append
+        >>> open("file.txt", "w+", opener=stdopen)  # read + write
+
+        # Replaced with stdin/stdout
+        >>> open("-", "r", opener=stdopen)  # read from stdin
+        >>> open("-", "wb", opener=stdopen)  # binary write to stdout
+        >>> open("-", "a", opener=stdopen)  # write to stdout
+        >>> open("-", "w+", opener=stdopen)  # not allowed!
+
+    Note:
+        On POSIX, open(2) generally defines RDONLY, WRONLY, RDWR as the
+        values 0, 1, 2. In other words, these are not bitwise flags! These
+        are checked by first masking with what POSIX would define as the
+        access mode ACCMODE, then checking for equality.
+    """
+    # Override with stdin/stdout
+    O_ACCMODE = os.O_RDONLY | os.O_WRONLY | os.O_RDWR
+    if path == "-":
+        if (flags & O_ACCMODE) == os.O_RDWR:
+            raise ValueError("R+W mode not allowed for standard streams.")
+        if (flags & O_ACCMODE) == os.O_RDONLY:
+            return os.dup(sys.stdin.fileno())  # duplicate fd for safe closing
+        if (flags & O_ACCMODE) == os.O_WRONLY:  # no need to check O_APPEND
+            return os.dup(sys.stdout.fileno())
+        raise RuntimeError(f"Error parsing flags during iostream open: {flags}")
+    return os.open(path, flags, mode=0o664)
+
+
+def is_stdio(filename: PathLike):
+    return str(filename) == "-"
+
 
 ###########################################
 #  PARSERS (from internal integer array)  #
@@ -209,7 +256,7 @@ def _read_a1(
     ignore_rollover: bool = False,
 ) -> Tuple[TimestampArray, DetectorArray]:
     """See documentation for 'read_a0'."""
-    with open(filename, "rb") as f:
+    with open(filename, "rb", opener=stdopen) as f:
         data = np.fromfile(file=f, dtype="<u4").reshape(-1, 2)  # uint32
     return _parse_a1(data, legacy, resolution, fractional, ignore_rollover)
 
@@ -354,7 +401,7 @@ def sread_a1(
     fractional: bool = True,
     buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
-) -> Tuple[TimestampDetectorStream, int]:
+) -> Tuple[TimestampDetectorStream, Optional[int]]:
     """Block streaming variant of 'read_a1'.
 
     For large timestamp datasets where either not all timestamps need
@@ -391,7 +438,7 @@ def sread_a1(
     """
 
     def _sread_a1():
-        with open(filename, "rb") as f:
+        with open(filename, "rb", opener=stdopen) as f:
             while True:
                 buffer = f.read(buffer_size * 8)  # 8 bytes per event
                 if len(buffer) == 0:
@@ -400,8 +447,10 @@ def sread_a1(
                     buffer, legacy, resolution, fractional, ignore_rollover
                 )
 
-    size = pathlib.Path(filename).stat().st_size
-    num_batches = int(((size - 1) // (buffer_size * 8)) + 1)
+    num_batches = None
+    if not is_stdio(filename):
+        size = pathlib.Path(filename).stat().st_size
+        num_batches = int(((size - 1) // (buffer_size * 8)) + 1)
     return _sread_a1(), num_batches
 
 
@@ -412,11 +461,11 @@ def sread_a0(
     fractional: bool = True,
     buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampDetectorStream, Optional[int]]:
     """See documentation for 'sread_a1'"""
 
     def _sread_a0():
-        with open(filename, "r") as f:
+        with open(filename, "r", opener=stdopen) as f:
             while True:
                 buffer = f.read(buffer_size * 18)  # 16 char per event + 2 newlines
                 if len(buffer) == 0:
@@ -425,8 +474,10 @@ def sread_a0(
                     buffer, legacy, resolution, fractional, ignore_rollover
                 )
 
-    size = pathlib.Path(filename).stat().st_size
-    num_batches = int(((size - 1) // (buffer_size * 18)) + 1)
+    num_batches = None
+    if not is_stdio(filename):
+        size = pathlib.Path(filename).stat().st_size
+        num_batches = int(((size - 1) // (buffer_size * 18)) + 1)
     return _sread_a0(), num_batches
 
 
@@ -437,11 +488,11 @@ def sread_a2(
     fractional: bool = True,
     buffer_size: Integer = 100_000,
     ignore_rollover: bool = False,
-):
+) -> Tuple[TimestampDetectorStream, Optional[int]]:
     """See documentation for 'sread_a1'"""
 
     def _sread_a2():
-        with open(filename, "r") as f:
+        with open(filename, "r", opener=stdopen) as f:
             while True:
                 buffer = f.read(buffer_size * 17)  # 16 char per event + 1 char newline
                 if len(buffer) == 0:
@@ -450,8 +501,10 @@ def sread_a2(
                     buffer, legacy, resolution, fractional, ignore_rollover
                 )
 
-    size = pathlib.Path(filename).stat().st_size
-    num_batches = int(((size - 1) // (buffer_size * 17)) + 1)
+    num_batches = None
+    if not is_stdio(filename):
+        size = pathlib.Path(filename).stat().st_size
+        num_batches = int(((size - 1) // (buffer_size * 17)) + 1)
     return _sread_a2(), num_batches
 
 
@@ -498,7 +551,7 @@ def read_a1_kth_timestamp(
         raise ValueError(f"Index out-of-bounds, only {num_events} events available.")
 
     buffer = bytearray()
-    with open(filename, "rb") as f:
+    with open(filename, "rb", opener=stdopen) as f:
         for _k in ks:
             f.seek(int(_k) * 8, io.SEEK_SET)  # should be O(1) in modern filesystems
             buffer.extend(f.read(8))
@@ -639,7 +692,7 @@ def write_a2(
     allow_duplicates: bool = True,
 ) -> None:
     data = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
-    with open(filename, "w") as f:
+    with open(filename, "w", opener=stdopen) as f:
         for line in data:
             f.write(f"{line:016x}\n")
 
@@ -656,7 +709,7 @@ def write_a0(
     data = np.empty((2 * events.size,), dtype=np.uint32)
     data[0::2] = events & 0xFFFFFFFF
     data[1::2] = events >> 32
-    with open(filename, "w") as f:
+    with open(filename, "w", opener=stdopen) as f:
         for line in data:
             f.write(f"{line:08x}\n")
 
@@ -670,7 +723,7 @@ def write_a1(
     allow_duplicates: bool = True,
 ) -> None:
     events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
-    with open(filename, "wb") as f:
+    with open(filename, "wb", opener=stdopen) as f:
         for line in events:
             if legacy:
                 line = int(line)
@@ -711,7 +764,7 @@ def swrite_a1(
     """
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
-    with open(filename, "wb") as f:
+    with open(filename, "wb", opener=stdopen) as f:
         for t, p in stream:
             events = _consolidate_events(
                 t, p, resolution, allow_duplicates=allow_duplicates
@@ -735,7 +788,7 @@ def swrite_a0(
     """See documentation for 'swrite_a1'."""
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
-    with open(filename, "w") as f:
+    with open(filename, "w", opener=stdopen) as f:
         for t, p in stream:
             events = _consolidate_events(
                 t, p, resolution, allow_duplicates=allow_duplicates
@@ -759,7 +812,7 @@ def swrite_a2(
     """See documentation for 'swrite_a1'."""
     if display:
         stream = tqdm.tqdm(stream, total=num_batches)  # type: ignore (tqdm constraint)
-    with open(filename, "w") as f:
+    with open(filename, "w", opener=stdopen) as f:
         for t, p in stream:
             data = _consolidate_events(
                 t, p, resolution, allow_duplicates=allow_duplicates
@@ -888,7 +941,7 @@ def print_statistics_report(
     """
 
     num_events = int(num_events)
-    print(f"Name: {str(filename)}")
+    print(f"Name: {str(filename) if not is_stdio(filename) else '<stdin>'}")
     if pathlib.Path(filename).is_file():
         filesize = pathlib.Path(filename).stat().st_size / (1 << 20)
         print(f"Filesize (MB): {filesize:.3f}")
@@ -1208,7 +1261,7 @@ def generate_parser():
     return parser
 
 
-def main():  # noqa: PLR0915
+def main():  # noqa: PLR0912, PLR0915
     # Print help if no arguments supplied
     parser = generate_parser()
     if len(sys.argv) == 1:
@@ -1226,7 +1279,7 @@ def main():  # noqa: PLR0915
 
     # Check file size
     filepath = pathlib.Path(args.infile)
-    if not filepath.is_file():
+    if not filepath.is_file() and not is_stdio(filepath):
         raise ValueError(f"'{args.infile}' is not a file.")
 
     # Define filter function for event and event stream
@@ -1236,6 +1289,8 @@ def main():  # noqa: PLR0915
 
     # Apply relative time
     if args.relative_time:
+        if is_stdio(filepath):
+            raise ValueError("'--relative-time' not supported for streams.")
         first_t, _ = read_a1_start_end(
             filepath,
             args.X,
@@ -1268,6 +1323,8 @@ def main():  # noqa: PLR0915
 
     # Use legacy read-write mechanisms
     if args.inmemory:
+        if is_stdio(filepath):
+            raise ValueError("'--inmemory' not supported for streams.")
         t, p = read(filepath, args.X, ignore_rollover=ignore_rollover)
         t, p = event_filter(t, p)
         if print_only:
