@@ -1184,80 +1184,63 @@ def generate_parser():
         description="Converts between different timestamp7 formats"
     )
 
+    # fmt: off
     parser.add_argument(
-        "-q", "--quiet", action="store_true", help="Suppress progress indicators"
-    )
+        "-q", "--quiet", action="store_true",
+        help="Suppress progress indicators")
     # Support for older read-write mechanisms, i.e. disable batch streaming
     parser.add_argument(
-        "--inmemory",
-        action="store_true",
-        help="Disable batch streaming (retained for legacy reasons)",
-    )
+        "--inmemory", action="store_true",
+        help="Disable batch streaming (retained for legacy reasons)")
     parser.add_argument(
-        "--rollover",
-        action="store_true",
-        help="Include rollover dummy events (generally unwanted)",
-    )
+        "--rollover", action="store_true",
+        help="Include rollover dummy events (generally unwanted)")
 
     pgroup = parser.add_argument_group("Timestamp formats")
     pgroup.add_argument(
-        "-A",
-        choices=["0", "1", "2"],
-        default="1",
-        help="Input timestamp format (default: 1)",
-    )
+        "-A", choices=["0", "1", "2"], default="1",
+        help="Input timestamp format (default: 1)")
     pgroup.add_argument(
-        "-X", action="store_true", help="Use legacy input format (default: False)"
-    )
+        "-X", action="store_true",
+        help="Use legacy input format (default: False)")
     pgroup.add_argument(
-        "-a",
-        choices=["0", "1", "2"],
-        default="1",
-        help="Output timestamp format (default: 1)",
-    )
+        "-a", choices=["0", "1", "2"], default="1",
+        help="Output timestamp format (default: 1)")
     pgroup.add_argument(
-        "-x", action="store_true", help="Use legacy output format (default: False)"
-    )
+        "-x", action="store_true",
+        help="Use legacy output format (default: False)")
 
     # Filtering
     pgroup = parser.add_argument_group("Pattern filtering")
     pgroup.add_argument(
-        "--pattern",
-        type=int,
-        metavar="",
-        help="Specify pattern for filtering (e.g. 5 for ch1+ch3)",
-    )
+        "--pattern", type=int, metavar="",
+        help="Specify pattern for filtering (e.g. 5 for ch1+ch3)")
     pgroup.add_argument(
-        "--mask",
-        action="store_true",
-        help="Use pattern as mask instead of fixed (default: False)",
-    )
+        "--mask", action="store_true",
+        help="Use pattern as mask instead of fixed (default: False)")
     pgroup.add_argument(
-        "--invert",
-        action="store_true",
-        help="Exclude pattern instead of include (default: False)",
-    )
+        "--invert", action="store_true",
+        help="Exclude pattern instead of include (default: False)")
 
     pgroup = parser.add_argument_group("Timestamp filtering")
     pgroup.add_argument(
-        "--start", type=float, metavar="", help="Specify start timestamp, in seconds"
-    )
+        "--start", type=float, metavar="",
+        help="Specify start timestamp, in seconds")
     pgroup.add_argument(
-        "--end", type=float, metavar="", help="Specify end timestamp, in seconds"
-    )
+        "--end", type=float, metavar="",
+        help="Specify end timestamp, in seconds")
     pgroup.add_argument(
-        "--relative-time",
-        action="store_true",
-        help="Use relative time to start timestamp instead.",
-    )
+        "--relative-time", action="store_true",
+        help="Use relative time to start timestamp instead.")
 
-    parser.add_argument("infile", help="Input timestamp file")
     parser.add_argument(
-        "outfile",
-        nargs="?",
-        const="",
-        help="Output timestamp file (optional: not required for printing)",
-    )
+        "infile",
+        help="Input timestamp file")
+    parser.add_argument(
+        "outfile", nargs="?", const="",
+        help="Output timestamp file (optional: not required for printing)")
+    # fmt: on
+
     return parser
 
 
