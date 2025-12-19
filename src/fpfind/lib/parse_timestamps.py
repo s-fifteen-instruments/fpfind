@@ -100,8 +100,8 @@ def _parse_a1(
         r = (data[:, low_pos] & 0b10000).astype(bool)  # check rollover flag
         data = data[~r]
 
-    high_words = data[:, high_pos].astype(np.uint64) << np.uint(22)
-    low_words = data[:, low_pos] >> np.uint(10)
+    high_words = data[:, high_pos].astype(np.uint64) << np.uint64(22)
+    low_words = data[:, low_pos] >> np.uint32(10)
     ts = _format_timestamps(high_words + low_words, resolution, fractional)
     ps = data[:, low_pos] & np.uint32(0xF)
     return ts, ps
@@ -326,7 +326,7 @@ def read_a0_from_buffer(
     ignore_rollover: bool = False,
 ):
     data = buffer.strip().split("\n")
-    data = np.array([int(v, 16) for v in data]).reshape(-1, 2)
+    data = np.array([int(v, 16) for v in data], dtype=np.uint32).reshape(-1, 2)
     return _parse_a0(data, resolution, fractional, ignore_rollover)
 
 
@@ -338,7 +338,7 @@ def read_a2_from_buffer(
     ignore_rollover: bool = False,
 ):
     data = buffer.strip().split("\n")
-    data = np.array([int(v, 16) for v in data])
+    data = np.array([int(v, 16) for v in data], dtype=np.uint64)
     return _parse_a2(data, resolution, fractional, ignore_rollover)
 
 
