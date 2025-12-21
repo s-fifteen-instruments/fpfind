@@ -103,6 +103,7 @@
 #define FCORR_DEFAULT 0            /* frequency correction in units of 2^FCORR_ARESBITS */
 #define FCORR_ARESDECIMAL -10      /* absolute resolution of correction, in power of 10, specifically for '-d' mode */
 #define FCORR_OFLOWRESBITS 64      /* overflow correction resolution, in power of 2 */
+#define PATTERN_DEFAULT 15         /* detector pattern for filtering */
 //#define __DEBUG__                /* global debug flag, uncomment to disable, send -v flag for more debug msgs */
 
 // Formatting colors
@@ -143,6 +144,8 @@ char *errormessage[] = {
     "Unable to allocate memory to freqbuffer",
     "Error parsing time correction as integer",
     "Duplicate filename specified for reading and writing", /* 15 */
+    "Error parsing detector pattern as integer",
+    "Detector pattern value out of range",
 };
 void wmsg(char *message) {
     fprintf(stderr, COLOR_ERROR "%s\n" COLOR_RESET, message);
@@ -193,6 +196,9 @@ Encoding options:\n\
   -d               Use units of 0.1ppb for '-f'/'-F'   (range: 0-1220703).\n\
   -u               Modify current frequency relative to reads from '-F'.\n\
 \n\
+Filter options:\n\
+  -p pattern       Detector pattern for optional filtering (range: 0-15).\n\
+\n\
 Shows this help with '-h' option. More descriptive documentation:\n\
 <https://github.com/s-fifteen-instruments/fpfind/blob/main/src/fpfind/freqcd.c>\n\
 ");
@@ -214,6 +220,7 @@ int main(int argc, char *argv[]) {
     const double FCORR_DTOB = ((long long)1 << -FCORR_ARESBITS) / pow(10, -FCORR_ARESDECIMAL);
 
     /* parse options */
+    unsigned int pattern = PATTERN_DEFAULT;  // detector pattern filtering
     int fcorr = FCORR_DEFAULT;  // frequency correction value
     ll tcorr = 0;               // time correction value
     char infilename[FNAMELENGTH] = {};  // store filename
@@ -225,7 +232,7 @@ int main(int argc, char *argv[]) {
     int isdebugverbose = 0;  // mark if need to show more verbose debug
     int opt;  // for getopt options
     opterr = 0;  // be quiet when no options supplied
-    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXduhv")) != EOF) {
+    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXdup:hv")) != EOF) {
         switch (opt) {
         case 'i':
             if (sscanf(optarg, FNAMEFORMAT, infilename) != 1) return -emsg(2);
@@ -256,6 +263,10 @@ int main(int argc, char *argv[]) {
             break;
         case 'u':
             isupdate = 1;
+            break;
+        case 'p':
+            if (sscanf(optarg, "%d", &pattern) != 1) return -emsg(16);
+            if (pattern > PATTERN_DEFAULT) return -emsg(17);
             break;
         case 'h':
             usage(); exit(1);
@@ -422,6 +433,12 @@ int main(int argc, char *argv[]) {
                     low = high;
                     high = _swp;
                 }
+
+                /* pre-filter events by pattern */
+                if ((low & pattern) == 0) {
+                    eventptr++;
+                    continue;
+                }
                 tsmeas = ((ull)high << 22) | (low >> 10);
 
                 /* calculate timestamp correction */
@@ -523,15 +540,15 @@ int main(int argc, char *argv[]) {
         //   and increase buffer size of output pipe in case write unavailable.
         //   By same measure, do not flush only when output buffer is full.
         /* write out events */
-        retval = write(outhandle, outbuffer, eventnum * sizeof(struct rawevent));
+        retval = write(outhandle, outbuffer, outevents * sizeof(struct rawevent));
 #ifdef __DEBUG__
         if (isdebugverbose) {
-            for (i = 0; i < eventnum; i++) {
+            for (i = 0; i < outevents; i++) {
                 fprintf(stderr, "[debug] Verify: %08x %08x\n", outbuffer[i].high, outbuffer[i].low);
             }
         }
 #endif
-        if (retval != eventnum * sizeof(struct rawevent)) {
+        if (retval != outevents * sizeof(struct rawevent)) {
             wmsg_i(30, "Error %d on write.", errno);
             break;  // graceful close
         }
