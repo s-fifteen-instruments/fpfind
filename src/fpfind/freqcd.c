@@ -104,6 +104,7 @@
 #define FCORR_ARESDECIMAL -10      /* absolute resolution of correction, in power of 10, specifically for '-d' mode */
 #define FCORR_OFLOWRESBITS 64      /* overflow correction resolution, in power of 2 */
 #define PATTERN_DEFAULT 15         /* detector pattern for filtering */
+#define EXCLUDE_DEFAULT 0          /* detector pattern for exclusion filtering */
 //#define __DEBUG__                /* global debug flag, uncomment to disable, send -v flag for more debug msgs */
 
 // Formatting colors
@@ -198,6 +199,7 @@ Encoding options:\n\
 \n\
 Filter options:\n\
   -p pattern       Detector pattern for optional filtering (range: 0-15).\n\
+  -e pattern       Detector pattern to exclude (range: 0-15).\n\
 \n\
 Shows this help with '-h' option. More descriptive documentation:\n\
 <https://github.com/s-fifteen-instruments/fpfind/blob/main/src/fpfind/freqcd.c>\n\
@@ -221,6 +223,7 @@ int main(int argc, char *argv[]) {
 
     /* parse options */
     unsigned int pattern = PATTERN_DEFAULT;  // detector pattern filtering
+    unsigned int exclude = EXCLUDE_DEFAULT;  // detector pattern filtering
     int fcorr = FCORR_DEFAULT;  // frequency correction value
     ll tcorr = 0;               // time correction value
     char infilename[FNAMELENGTH] = {};  // store filename
@@ -232,7 +235,7 @@ int main(int argc, char *argv[]) {
     int isdebugverbose = 0;  // mark if need to show more verbose debug
     int opt;  // for getopt options
     opterr = 0;  // be quiet when no options supplied
-    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXdup:hv")) != EOF) {
+    while ((opt = getopt(argc, argv, "i:o:F:f:t:xXdup:e:hv")) != EOF) {
         switch (opt) {
         case 'i':
             if (sscanf(optarg, FNAMEFORMAT, infilename) != 1) return -emsg(2);
@@ -267,6 +270,12 @@ int main(int argc, char *argv[]) {
         case 'p':
             if (sscanf(optarg, "%d", &pattern) != 1) return -emsg(16);
             if (pattern > PATTERN_DEFAULT) return -emsg(17);
+            break;
+        case 'e':
+            if (sscanf(optarg, "%d", &exclude) != 1) return -emsg(16);
+            if (exclude > PATTERN_DEFAULT) return -emsg(17);
+            exclude = ~exclude;  // umask form
+            printf("hey %u\n", exclude);
             break;
         case 'h':
             usage(); exit(1);
@@ -435,6 +444,10 @@ int main(int argc, char *argv[]) {
                 }
 
                 /* pre-filter events by pattern */
+                // If complete exclusion (OR) is required, use the following commented code,
+                // noting that dummy bit 5 and blind bit 4 should be included as well in args.
+                // if ((low & exclude) != 0) { eventptr++; continue; }
+                low = low & exclude;  // for bit exclusion
                 if ((low & pattern) == 0) {
                     eventptr++;
                     continue;
