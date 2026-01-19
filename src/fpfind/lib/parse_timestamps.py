@@ -723,12 +723,9 @@ def write_a1(
     allow_duplicates: bool = True,
 ) -> None:
     events = _consolidate_events(t, p, resolution, allow_duplicates=allow_duplicates)
-    with open(filename, "wb", opener=stdopen) as f:
-        for line in events:
-            if legacy:
-                line = int(line)
-                line = ((line & 0xFFFFFFFF) << 32) + (line >> 32)
-            f.write(struct.pack("=Q", line))
+    if legacy:
+        events = ((events & 0xFFFFFFFF) << 32) + (events >> 32)
+    events.tofile(filename)
 
 
 ######################
