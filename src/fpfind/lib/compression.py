@@ -225,7 +225,7 @@ class DTS:
             metadata=metadata,
             **kwargs,
         )
-        target.rename(filename)  # rename
+        target.rename(str(filename))  # rename
 
     @staticmethod
     def _load_encoded(filename: PathLike) -> "DTS":
