@@ -67,6 +67,7 @@ markers = [
     "slow: for tests with long runtime",
     "float80: for platforms with extended precision support (80-bit floats)",
     "float64: for platforms without extended precision support",
+    "unix: for UNIX platforms",
 ]
 
 [tool.ruff.lint]

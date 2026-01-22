@@ -1,7 +1,10 @@
 import filecmp
 import subprocess
 
+import pytest
 
+
+@pytest.mark.unix
 def test_parse_timestamps_stdout(path_timestamp_a1, tmp_path):
     t1 = tmp_path / "intermediate1.ts"
     t2 = tmp_path / "intermediate2.ts"

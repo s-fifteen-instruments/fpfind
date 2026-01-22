@@ -1,3 +1,4 @@
+import sys
 import warnings
 
 import numpy as np
@@ -38,6 +39,10 @@ def pytest_collection_modifyitems(config, items):
         skip("float64", "extended precision supported")
     else:
         skip("float80", "no support for extended precision")
+
+    # Exclude Windows from Linux-only tests
+    if sys.platform == "win32":
+        skip("unix", "cannot run on Windows")
 
 
 @pytest.fixture
