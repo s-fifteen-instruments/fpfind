@@ -668,11 +668,23 @@ def _consolidate_events(
     Note:
         float128 is needed, since float64 only encodes 53-bits of precision,
         while the high resolution timestamp has 54-bits precision.
+
+        Output format has the base 4ps resolution (finest), so no need to
+        perform a lossy conversion to floating if input timestamps are already
+        integers (which can only have coarser resolution).
     """
-    data = (
-        np.array(t, dtype=NP_PRECISEFLOAT) * (TSRES.PS4.value // resolution.value)
-    ).astype(np.uint64) << np.uint64(10)
-    data += np.array(p).astype(np.uint64)
+    # Convert to 4ps resolution then coerce as integer
+    if not np.issubdtype(t.dtype, np.integer):
+        data = np.array(t, dtype=NP_PRECISEFLOAT)  # copy with maximal accuracy
+    else:
+        data = np.array(t, dtype=np.uint64)
+    if resolution is not TSRES.PS4:  # short-circuit
+        data *= TSRES.PS4.value // resolution.value
+    data = np.asarray(data, dtype=np.uint64)
+
+    # Add detector pattern
+    data <<= np.uint64(10)
+    data += np.asarray(p, dtype=np.uint64)
     if sort:
         data = np.sort(data)
 

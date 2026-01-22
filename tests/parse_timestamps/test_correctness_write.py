@@ -5,6 +5,10 @@ import numpy as np
 import fpfind.lib.parse_timestamps as parser
 from fpfind import TSRES
 
+LOAD_RAW = {
+    "resolution": TSRES.PS4,
+    "fractional": False,
+}
 
 def _write_a1_deprec(
     filename,
@@ -39,6 +43,22 @@ def test_write_a1(path_timestamp_a1, tmp_path):
     # With legacy mode
     parser.write_a1(target, ts, ps, legacy=True)
     _ts, _ps = parser.read_a1(target, legacy=True)
+    assert np.all(ts == _ts)
+    assert np.all(ps == _ps)
+
+
+def test_write_a1_4ps(path_timestamp_a1, tmp_path):
+    target = tmp_path / "ts"
+    ts, ps = parser.read_a1(path_timestamp_a1, legacy=True, **LOAD_RAW)
+
+    parser.write_a1(target, ts, ps, resolution=TSRES.PS4)
+    _ts, _ps = parser.read_a1(target, **LOAD_RAW)
+    assert np.all(ts == _ts)
+    assert np.all(ps == _ps)
+
+    # With legacy mode
+    parser.write_a1(target, ts, ps, legacy=True, resolution=TSRES.PS4)
+    _ts, _ps = parser.read_a1(target, legacy=True, **LOAD_RAW)
     assert np.all(ts == _ts)
     assert np.all(ps == _ps)
 
