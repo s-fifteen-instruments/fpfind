@@ -17,7 +17,6 @@ from fpfind.lib.constants import TSRES, PeakFindingFailed
 from fpfind.lib.parse_epochs import date2epoch, epoch2int, int2epoch, read_T1, read_T2
 from fpfind.lib.parse_timestamps import read_a1_kth_timestamp
 from fpfind.lib.typing import (
-    Complex_,
     DetectorArray,
     Float,
     Integer,
@@ -198,8 +197,8 @@ def generate_fft(
 
 
 def get_xcorr(
-    afft: NDArray[Complex_],
-    bfft: NDArray[Complex_],
+    afft: NDArray[np.complexfloating],
+    bfft: NDArray[np.complexfloating],
     filter: Optional[NDArray[np.number]] = None,
 ) -> NDArray[np.float64]:
     """Returns the cross-correlation.
@@ -559,8 +558,8 @@ def timestamp2epoch(
 
 def xcorr(abs: NDArray[np.number], bbs: NDArray[np.number]):
     """Performs the main cross-correlation routine."""
-    afft: NDArray[Complex_] = scipy.fft.rfft(abs)  # type: ignore (dispatchable)
-    bfft: NDArray[Complex_] = scipy.fft.rfft(bbs)  # type: ignore (dispatchable)
+    afft: NDArray[np.complexfloating] = scipy.fft.rfft(abs)  # type: ignore (dispatchable)
+    bfft: NDArray[np.complexfloating] = scipy.fft.rfft(bbs)  # type: ignore (dispatchable)
     ys = get_xcorr(afft, bfft)
     return ys
 
