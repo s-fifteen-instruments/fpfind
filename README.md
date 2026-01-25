@@ -8,11 +8,10 @@ An add-on implementation of frequency compensation for [qcrypto](https://github.
 pip3 install fpfind
 ```
 
-Requirements:
-
-* Python 3.8 and above, running in Linux
+* Python 3.8+ in Linux x64/ARM64 (and compatibility with Windows x64 and MacOS Apple Silicon)
 * `gcc` (if running `freqcd`, preferably in PATH for auto-compilation)
 
+Python versions up till 3.14 are supported (non-free-threaded).
 The stable releases are tagged and listed [here](https://github.com/s-fifteen-instruments/fpfind/tags).
 
 ## Usage
