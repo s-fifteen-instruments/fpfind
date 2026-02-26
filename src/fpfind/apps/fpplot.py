@@ -58,23 +58,30 @@ def plotter(
         xs = xs[::decimation]
 
     elapsed = (alice[-1] - alice[0]) * 1e-9
-    _center = ys[500:1500]
-    _sides = np.array(list(ys[:500]) + list(ys[1500:]))
-    coincidences = np.sum(_center) - np.sum(_sides) * len(_center) / len(_sides)
+
+    # Center of histogram assumed to be the peak
+    assert len(ys) > 1
+    length, p25 = len(ys) // 2, len(ys) // 4
+    _center = ys[p25:p25 + length]
+    bg = np.sum(ys[:p25]) + np.sum(ys[p25+length:])
+    bglen = p25 + len(ys[p25+length:])
+    coincidences = np.sum(_center) - bg * len(_center) / bglen
 
     s1 = len(alice) / elapsed
     s2 = len(bob) / elapsed
     c = coincidences / elapsed
-    print("Totals:")
+    print(f"\nIntegration time: {elapsed:.3f}s")
+    print("Total events:")
     print(f"  S1: {len(alice):d}")
     print(f"  S2: {len(bob):d}")
     print(f"  C:  {coincidences:.0f}")
-    print(f"Time elapsed: {elapsed:.3f}s")
+    print("\nCount rates (per second):")
     print(f"  s1: {s1:.0f}")
     print(f"  s2: {s2:.0f}")
-    print(f"  sg: {(len(alice) * len(bob)) ** 0.5 / elapsed:.0f}")
-    print(f"  c:  {c:.0f}")
-    print(f"Efficiency: {100 * c / np.sqrt(s1 * s2):.1f}%")
+    print(f"  c:  {c:.0f} (eff: {100 * c / np.sqrt(s1 * s2):.2f}%)")
+    print("\nOther rates (per second):")
+    print(f"  acc/bin: {bg / bglen / elapsed:.0f}")
+    print(f"  avg(s1,s2): {(len(alice) * len(bob)) ** 0.5 / elapsed:.0f}")
 
     # Normalize?
     plt.subplots(figsize=(5, 3.5))
